@@ -1,5 +1,4 @@
 import 'react-native-gesture-handler/jestSetup';
-import '@testing-library/jest-native/extend-expect';
 
 jest.mock('react-native-mmkv', () => ({
   MMKV: jest.fn().mockImplementation(() => ({
@@ -7,6 +6,12 @@ jest.mock('react-native-mmkv', () => ({
     set: jest.fn(),
     delete: jest.fn(),
   })),
+}));
+
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn().mockResolvedValue(null),
+  setItemAsync: jest.fn().mockResolvedValue(undefined),
+  deleteItemAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('expo-haptics', () => ({
