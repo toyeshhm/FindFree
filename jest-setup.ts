@@ -1,5 +1,35 @@
 import 'react-native-gesture-handler/jestSetup';
 
+jest.mock('react-native-reanimated', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  const useSharedValue = (init: any) => ({ value: init });
+  const useAnimatedStyle = (fn: () => any) => fn();
+  const withSpring = (val: any) => val;
+  const withTiming = (val: any) => val;
+  const withRepeat = (val: any) => val;
+
+  const Animated = {
+    View,
+    createAnimatedComponent: (comp: any) => comp,
+  };
+
+  return {
+    __esModule: true,
+    default: Animated,
+    useSharedValue,
+    useAnimatedStyle,
+    withSpring,
+    withTiming,
+    withRepeat,
+    runOnJS: (fn: any) => fn,
+    runOnUI: (fn: any) => fn,
+    makeMutable: (init: any) => ({ value: init }),
+    Easing: { linear: (t: any) => t },
+  };
+});
+
 jest.mock('react-native-mmkv', () => ({
   MMKV: jest.fn().mockImplementation(() => ({
     getString: jest.fn().mockReturnValue(null),
