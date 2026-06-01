@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import { MMKV } from 'react-native-mmkv';
 
@@ -8,9 +9,8 @@ async function getMmkv(): Promise<MMKV> {
   if (_mmkv) return _mmkv;
   let encKey = await SecureStore.getItemAsync(KEY_ID);
   if (!encKey) {
-    encKey = Array.from({ length: 32 }, () =>
-      Math.floor(Math.random() * 256).toString(16).padStart(2, '0')
-    ).join('');
+    const bytes = Crypto.getRandomBytes(32);
+    encKey = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
     await SecureStore.setItemAsync(KEY_ID, encKey);
   }
   _mmkv = new MMKV({ id: 'ff-auth', encryptionKey: encKey });

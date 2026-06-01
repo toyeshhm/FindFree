@@ -38,6 +38,10 @@ jest.mock('react-native-mmkv', () => ({
   })),
 }));
 
+jest.mock('expo-crypto', () => ({
+  getRandomBytes: (size: number) => new Uint8Array(size).fill(0xab),
+}));
+
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn().mockResolvedValue(null),
   setItemAsync: jest.fn().mockResolvedValue(undefined),
