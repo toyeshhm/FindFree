@@ -32,7 +32,9 @@ CREATE POLICY "Anyone can view community posts" ON community_posts FOR SELECT US
 CREATE POLICY "Users can insert community posts" ON community_posts FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update their own posts" ON community_posts FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users can delete their own posts" ON community_posts FOR DELETE USING (auth.uid() = user_id);
-CREATE POLICY "Anyone can claim coupons" ON community_posts FOR UPDATE USING (true) WITH CHECK (true);
+-- Coupon claiming is handled via claim_coupon() SECURITY DEFINER function below.
+-- No open UPDATE policy — unrestricted UPDATE USING(true) lets any authenticated
+-- user overwrite any column on any row.
 
 ALTER TABLE community_comments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Anyone can view comments" ON community_comments FOR SELECT USING (true);
@@ -43,6 +45,18 @@ ALTER TABLE community_post_likes ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Anyone can view likes" ON community_post_likes FOR SELECT USING (true);
 CREATE POLICY "Users can insert likes" ON community_post_likes FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can delete likes" ON community_post_likes FOR DELETE USING (auth.uid() = user_id);
+
+-- Only sets coupon_claimed = true; does not expose any other column to callers.
+-- SECURITY DEFINER runs as the function owner (postgres), bypassing RLS for this
+-- one targeted write. Callers need only be authenticated.
+CREATE OR REPLACE FUNCTION claim_coupon(post_id UUID) RETURNS void
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE community_posts SET coupon_claimed = true WHERE id = post_id;
+END;
+$$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION increment_like_count(row_id UUID) RETURNS void AS $$
 BEGIN
