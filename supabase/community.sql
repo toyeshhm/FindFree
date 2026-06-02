@@ -7,6 +7,8 @@ CREATE TABLE community_posts (
   body TEXT NOT NULL,
   coupon_code TEXT,
   coupon_claimed BOOLEAN DEFAULT FALSE,
+  claimed_by UUID REFERENCES auth.users ON DELETE SET NULL,
+  claimed_at TIMESTAMPTZ,
   like_count INT DEFAULT 0,
   comment_count INT DEFAULT 0,
   photo_urls TEXT[] DEFAULT '{}',
@@ -46,17 +48,32 @@ CREATE POLICY "Anyone can view likes" ON community_post_likes FOR SELECT USING (
 CREATE POLICY "Users can insert likes" ON community_post_likes FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can delete likes" ON community_post_likes FOR DELETE USING (auth.uid() = user_id);
 
--- Only sets coupon_claimed = true; does not expose any other column to callers.
--- SECURITY DEFINER runs as the function owner (postgres), bypassing RLS for this
--- one targeted write. Callers need only be authenticated.
+-- Atomically claims a coupon post. Guards:
+--   1. Caller must be authenticated.
+--   2. Idempotent: WHERE coupon_claimed = false prevents double-claiming.
+--   3. Records who claimed it and when for audit purposes.
+-- SECURITY DEFINER bypasses RLS for this one targeted write only.
 CREATE OR REPLACE FUNCTION claim_coupon(post_id UUID) RETURNS void
+LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
 BEGIN
-  UPDATE community_posts SET coupon_claimed = true WHERE id = post_id;
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  UPDATE community_posts
+  SET coupon_claimed = true,
+      claimed_by     = auth.uid(),
+      claimed_at     = now()
+  WHERE id = post_id
+    AND coupon_claimed = false;
 END;
-$$ LANGUAGE plpgsql;
+$$;
+
+REVOKE EXECUTE ON FUNCTION claim_coupon(UUID) FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION claim_coupon(UUID) TO authenticated;
 
 CREATE OR REPLACE FUNCTION increment_like_count(row_id UUID) RETURNS void AS $$
 BEGIN
