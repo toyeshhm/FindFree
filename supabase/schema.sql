@@ -90,7 +90,11 @@ CREATE OR REPLACE FUNCTION get_users_to_notify(
 RETURNS TABLE (
   id UUID,
   push_token TEXT
-) AS $$
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 BEGIN
   RETURN QUERY
   SELECT
@@ -103,7 +107,12 @@ BEGIN
     -- ST_DistanceSphere returns meters. (1 mile = 1609.34 meters)
     AND (ST_DistanceSphere(ST_Point(u.lng, u.lat), ST_Point(item_lng, item_lat)) / 1609.34) <= COALESCE(u.push_radius_miles, 10);
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+
+-- Only the service-role key (used by the edge function) should call this.
+-- Prevents authenticated users from enumerating push tokens of nearby users.
+REVOKE EXECUTE ON FUNCTION get_users_to_notify(DOUBLE PRECISION, DOUBLE PRECISION, UUID) FROM PUBLIC, anon, authenticated;
+GRANT  EXECUTE ON FUNCTION get_users_to_notify(DOUBLE PRECISION, DOUBLE PRECISION, UUID) TO service_role;
 
 -- Auto-create user_profiles row when a new user signs up
 CREATE OR REPLACE FUNCTION handle_new_user()
@@ -317,8 +326,15 @@ DROP POLICY IF EXISTS "item_photos_delete"  ON storage.objects;
 CREATE POLICY "item_photos_select" ON storage.objects FOR SELECT
   USING (bucket_id = 'item-photos');
 
+-- Require uploads to live under the uploader's own user-id folder
+-- (e.g. item-photos/<user-id>/filename.jpg) so users can't overwrite each other's files.
 CREATE POLICY "item_photos_insert" ON storage.objects FOR INSERT
-  WITH CHECK (bucket_id = 'item-photos' AND auth.uid() IS NOT NULL);
+  WITH CHECK (
+    bucket_id = 'item-photos'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
 
+-- Only allow deleting objects you own (owner is set by Supabase on upload).
 CREATE POLICY "item_photos_delete" ON storage.objects FOR DELETE
-  USING (bucket_id = 'item-photos' AND auth.uid() IS NOT NULL);
+  USING (bucket_id = 'item-photos' AND owner = auth.uid());
