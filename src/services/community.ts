@@ -95,17 +95,20 @@ export const communityService = {
   },
 
   toggleLike: async (postId: string, userId: string, currentlyLiked: boolean): Promise<void> => {
+    // like_count is updated automatically by the on_like_change DB trigger.
     if (currentlyLiked) {
-      await supabase.from('community_post_likes').delete().match({ post_id: postId, user_id: userId });
-      await supabase.rpc('decrement_like_count', { row_id: postId });
+      const { error } = await supabase.from('community_post_likes').delete().match({ post_id: postId, user_id: userId });
+      if (error) throw error;
     } else {
-      await supabase.from('community_post_likes').insert({ post_id: postId, user_id: userId });
-      await supabase.rpc('increment_like_count', { row_id: postId });
+      const { error } = await supabase.from('community_post_likes').insert({ post_id: postId, user_id: userId });
+      if (error) throw error;
     }
   },
 
   claimCoupon: async (postId: string): Promise<void> => {
-    const { error } = await supabase.from('community_posts').update({ coupon_claimed: true }).eq('id', postId);
+    // Uses the claim_coupon() SECURITY DEFINER RPC which adds an auth check,
+    // idempotency guard (only claims if not already claimed), and audit fields.
+    const { error } = await supabase.rpc('claim_coupon', { post_id: postId });
     if (error) throw error;
   },
 
@@ -141,7 +144,7 @@ export const communityService = {
       .single();
 
     if (error) throw error;
-    await supabase.rpc('increment_comment_count', { row_id: postId });
+    // comment_count is updated automatically by the on_comment_change DB trigger.
 
     const name = data.user_profiles?.name || 'Anonymous';
     return {

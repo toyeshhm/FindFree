@@ -74,7 +74,7 @@ export function PostItemScreen({ navigation }: Props) {
     try {
       const uploadedUrls: string[] = [];
       for (const uri of photoUris) {
-        const url = await storageService.uploadImage(uri);
+        const url = await storageService.uploadImage(uri, session.user.id);
         uploadedUrls.push(url);
       }
 

@@ -227,28 +227,6 @@ DROP POLICY IF EXISTS "profiles_select" ON user_profiles;
 DROP POLICY IF EXISTS "profiles_insert" ON user_profiles;
 DROP POLICY IF EXISTS "profiles_update" ON user_profiles;
 
-CREATE POLICY "Anyone can view likes" ON community_post_likes FOR SELECT USING (true);
-CREATE POLICY "Users can insert likes" ON community_post_likes FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can delete likes" ON community_post_likes FOR DELETE USING (auth.uid() = user_id);
-
-CREATE OR REPLACE FUNCTION increment_like_count(row_id UUID) RETURNS void AS $$
-BEGIN
-  UPDATE community_posts SET like_count = like_count + 1 WHERE id = row_id;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION decrement_like_count(row_id UUID) RETURNS void AS $$
-BEGIN
-  UPDATE community_posts SET like_count = like_count - 1 WHERE id = row_id;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION increment_comment_count(row_id UUID) RETURNS void AS $$
-BEGIN
-  UPDATE community_posts SET comment_count = comment_count + 1 WHERE id = row_id;
-END;
-$$ LANGUAGE plpgsql;
-
 CREATE POLICY "profiles_select" ON user_profiles FOR SELECT USING (true);
 CREATE POLICY "profiles_insert" ON user_profiles FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "profiles_update" ON user_profiles FOR UPDATE

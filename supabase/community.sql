@@ -75,20 +75,49 @@ $$;
 REVOKE EXECUTE ON FUNCTION claim_coupon(UUID) FROM PUBLIC, anon;
 GRANT  EXECUTE ON FUNCTION claim_coupon(UUID) TO authenticated;
 
-CREATE OR REPLACE FUNCTION increment_like_count(row_id UUID) RETURNS void AS $$
-BEGIN
-  UPDATE community_posts SET like_count = like_count + 1 WHERE id = row_id;
-END;
-$$ LANGUAGE plpgsql;
+-- Triggers maintain like_count and comment_count automatically.
+-- This avoids callable RPCs that could be exploited to manipulate counts,
+-- and fixes the RLS problem where the liker (non-owner) can't directly UPDATE
+-- another user's community_posts row.
 
-CREATE OR REPLACE FUNCTION decrement_like_count(row_id UUID) RETURNS void AS $$
+CREATE OR REPLACE FUNCTION update_like_count()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 BEGIN
-  UPDATE community_posts SET like_count = like_count - 1 WHERE id = row_id;
+  IF TG_OP = 'INSERT' THEN
+    UPDATE community_posts SET like_count = like_count + 1 WHERE id = NEW.post_id;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE community_posts SET like_count = GREATEST(like_count - 1, 0) WHERE id = OLD.post_id;
+  END IF;
+  RETURN NULL;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
-CREATE OR REPLACE FUNCTION increment_comment_count(row_id UUID) RETURNS void AS $$
+DROP TRIGGER IF EXISTS on_like_change ON community_post_likes;
+CREATE TRIGGER on_like_change
+  AFTER INSERT OR DELETE ON community_post_likes
+  FOR EACH ROW EXECUTE FUNCTION update_like_count();
+
+CREATE OR REPLACE FUNCTION update_comment_count()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 BEGIN
-  UPDATE community_posts SET comment_count = comment_count + 1 WHERE id = row_id;
+  IF TG_OP = 'INSERT' THEN
+    UPDATE community_posts SET comment_count = comment_count + 1 WHERE id = NEW.post_id;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE community_posts SET comment_count = GREATEST(comment_count - 1, 0) WHERE id = OLD.post_id;
+  END IF;
+  RETURN NULL;
 END;
-$$ LANGUAGE plpgsql;
+$$;
+
+DROP TRIGGER IF EXISTS on_comment_change ON community_comments;
+CREATE TRIGGER on_comment_change
+  AFTER INSERT OR DELETE ON community_comments
+  FOR EACH ROW EXECUTE FUNCTION update_comment_count();
