@@ -2,14 +2,20 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { PressableScale } from '@/components/PressableScale';
 import { Avatar } from '@/components/Avatar';
+import { WaxSeal } from '@/components/motifs';
 import { Colors, Typography, Spacing } from '@/lib';
 import type { Conversation } from '@/types';
+import { createStyleSheet } from "@/lib/theme";
 
 interface ConversationRowProps {
   conv:    Conversation;
   onPress: (convId: string) => void;
 }
 
+/**
+ * A ledger entry in the dispatch log: ink-ringed Avatar, an engraved Cinzel name,
+ * the last dispatch in plain hand, and a sealing-wax stamp marking unread count.
+ */
 export function ConversationRow({ conv, onPress }: ConversationRowProps) {
   const name = conv.otherUser?.name ?? 'Unknown';
   const time = conv.lastMessageAt
@@ -19,12 +25,16 @@ export function ConversationRow({ conv, onPress }: ConversationRowProps) {
       })()
     : '';
 
+  const unread = conv.unreadCount > 0;
+
   return (
     <PressableScale
       onPress={() => onPress(conv.id)}
       style={styles.row}
       accessibilityRole="button"
-      accessibilityLabel={`Conversation with ${name}. ${conv.lastMessage ?? 'No messages yet.'}`}
+      accessibilityLabel={`Conversation with ${name}. ${conv.lastMessage ?? 'No messages yet.'}${
+        unread ? ` ${conv.unreadCount} unread.` : ''
+      }`}
     >
       <Avatar uri={conv.otherUser?.avatarUrl} size={44} />
       <View style={styles.content}>
@@ -36,38 +46,30 @@ export function ConversationRow({ conv, onPress }: ConversationRowProps) {
           {conv.item?.title ? `Re: ${conv.item.title}` : conv.lastMessage ?? ''}
         </Text>
       </View>
-      {conv.unreadCount > 0 && (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{conv.unreadCount}</Text>
+      {unread && (
+        <View style={styles.seal} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <WaxSeal label={String(conv.unreadCount)} size={28} />
         </View>
       )}
     </PressableScale>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyleSheet((Colors) => ({
   row: {
-    flexDirection:    'row',
-    alignItems:       'center',
-    gap:              Spacing.md,
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               Spacing.md,
     paddingHorizontal: Spacing.gutter,
-    paddingVertical:  Spacing.md,
+    paddingVertical:   Spacing.base,
+    minHeight:         64,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.DIVIDER,
+    borderBottomColor: Colors.BORDER,
   },
-  content:   { flex: 1 },
-  topRow:    { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  name:      { ...Typography.label, color: Colors.CREAM, fontWeight: '700' },
-  preview:   { ...Typography.caption, color: Colors.MUTED_ASH },
-  time:      { ...Typography.caption, color: Colors.MUTED_ASH, fontVariant: ['tabular-nums'] },
-  badge: {
-    backgroundColor:  Colors.RUST,
-    minWidth:         20,
-    height:           20,
-    borderRadius:     10,
-    alignItems:       'center',
-    justifyContent:   'center',
-    paddingHorizontal: 4,
-  },
-  badgeText: { ...Typography.tinyLabel, color: Colors.CREAM, fontSize: 10 },
-});
+  content: { flex: 1 },
+  topRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  name:    { ...Typography.subheading, color: Colors.TEXT_PRIMARY, flex: 1, marginRight: Spacing.sm },
+  preview: { ...Typography.bodyCompact, color: Colors.TEXT_SECONDARY },
+  time:    { ...Typography.caption, color: Colors.TEXT_MUTED, fontVariant: ['tabular-nums'] },
+  seal:    { width: 32, alignItems: 'center', justifyContent: 'center' },
+}));

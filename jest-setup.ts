@@ -32,13 +32,6 @@ jest.mock('react-native-reanimated', () => {
   };
 });
 
-jest.mock('react-native-mmkv', () => ({
-  MMKV: jest.fn().mockImplementation(() => ({
-    getString: jest.fn().mockReturnValue(null),
-    set: jest.fn(),
-    delete: jest.fn(),
-  })),
-}));
 
 jest.mock('expo-crypto', () => ({
   getRandomBytes: (size: number) => new Uint8Array(size).fill(0xab),
@@ -61,7 +54,8 @@ jest.mock('expo-haptics', () => ({
 jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: jest.fn(),
   getCurrentPositionAsync: jest.fn(),
-  Accuracy: { Balanced: 3 },
+  watchPositionAsync: jest.fn().mockResolvedValue({ remove: jest.fn() }),
+  Accuracy: { Balanced: 3, Highest: 6 },
 }));
 
 jest.mock('react-native-maps', () => {

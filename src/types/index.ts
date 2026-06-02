@@ -1,9 +1,11 @@
-export type ItemCategory =
-  | 'furniture' | 'electronics' | 'clothing' | 'books'
-  | 'kitchen'   | 'sports'      | 'toys'     | 'other';
+export type DealCategory = 'food' | 'drinks' | 'grocery' | 'retail' | 'local' | 'furniture' | 'electronics' | 'clothing' | 'books' | 'kitchen' | 'sports' | 'toys' | 'other';
+export type ItemCategory = DealCategory;
 
-export type ItemSource  = 'user' | 'facebook' | 'craigslist' | 'buynot';
+export type ClaimType   = 'code' | 'in-store' | 'app-required' | 'no-action';
+export type ItemSource  = 'user' | 'reddit' | 'mcdonalds' | 'starbucks' | 'chickfila' | 'flipp' | 'facebook' | 'craigslist';
 export type ItemStatus  = 'available' | 'claimed' | 'deleted';
+
+export type CommunityPostType = 'coupon' | 'free-stuff' | 'find';
 
 export interface LatLng {
   lat: number;
@@ -14,16 +16,50 @@ export interface Item {
   id: string;
   title: string;
   description: string;
-  category: ItemCategory;
+  category: DealCategory;
   location: LatLng & { address?: string };
   photoUrls: string[];
   source: ItemSource;
+  sourceName: string;
   sourceId?: string;
   userId?: string;
   status: ItemStatus;
+  claimType: ClaimType;
+  couponCode?: string;
+  claimedCount?: number;
   createdAt: string;
-  expiresAt: string;
+  expiresAt?: string;
   distanceKm?: number;
+  distanceMi?: number;
+}
+
+export interface CommunityPost {
+  id: string;
+  userId: string;
+  userName: string;
+  userInitials: string;
+  userAvatarUrl?: string;
+  userLocation: string;
+  type: CommunityPostType;
+  body: string;
+  couponCode?: string;
+  couponClaimed: boolean;
+  photoUrls?: string[];
+  likeCount: number;
+  commentCount: number;
+  liked: boolean;
+  createdAt: string;
+}
+
+export interface CommunityComment {
+  id: string;
+  postId: string;
+  userId: string;
+  userName: string;
+  userInitials: string;
+  userAvatarUrl?: string;
+  text: string;
+  createdAt: string;
 }
 
 export interface User {

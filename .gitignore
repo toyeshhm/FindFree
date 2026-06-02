@@ -8,3 +8,11 @@ web-build/
 .DS_Store
 ios/
 android/
+
+# Tooling / AI agent state
+.claude/
+.claude-flow/
+.swarm/
+.agents/
+ruvector.db
+skills-lock.json

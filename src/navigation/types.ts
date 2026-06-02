@@ -3,13 +3,17 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation as useNav } from '@react-navigation/native';
 
 export type RootStackParamList = {
-  Splash:     undefined;
-  Onboarding: undefined;
-  Auth:       NavigatorScreenParams<AuthStackParamList>;
-  Main:       NavigatorScreenParams<TabParamList>;
-  ItemDetail: { itemId: string };
-  ChatThread: { conversationId: string; itemTitle: string };
-  PostItem:   undefined;
+  Splash:          undefined;
+  Onboarding:      undefined;
+  Auth:            NavigatorScreenParams<AuthStackParamList>;
+  Main:            NavigatorScreenParams<TabParamList>;
+  ItemDetail:      { itemId: string };
+  PostItem:        undefined;
+  AccountSettings: undefined;
+  NotificationSettings: undefined;
+  ThemeSettings:   undefined;
+  ForgotPassword:  undefined;
+  ChatThread:      { conversationId: string; itemTitle: string };
 };
 
 export type AuthStackParamList = {
@@ -18,11 +22,11 @@ export type AuthStackParamList = {
 };
 
 export type TabParamList = {
-  MapTab:      undefined;
-  FeedTab:     undefined;
-  MessagesTab: undefined;
-  SavedTab:    undefined;
-  ProfileTab:  undefined;
+  DiscoverTab:  undefined;
+  MapTab:       { focusLat: number; focusLng: number } | undefined;
+  CommunityTab: undefined;
+  SavedTab:     undefined;
+  ProfileTab:   undefined;
 };
 
 export const useNavigation = () =>

@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming } from 'react-native-reanimated';
-import { Colors, Spacing } from '@/lib';
+import { Colors, Spacing, Stamp, Radius } from '@/lib';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import { createStyleSheet } from "@/lib/theme";
 
 export function SkeletonCard() {
   const opacity = useSharedValue(0.4);
@@ -30,17 +31,20 @@ export function SkeletonCard() {
   );
 }
 
-const FILL = Colors.LIGHT_CHARCOAL;
-const styles = StyleSheet.create({
+const FILL = Colors.SURFACE_DEEP;
+const styles = createStyleSheet((Colors) => ({
   card: {
-    marginHorizontal: Spacing.md,
-    marginBottom:     Spacing.md,
-    backgroundColor:  Colors.MID_CHARCOAL,
-    borderLeftWidth:  3,
-    borderLeftColor:  Colors.LIGHT_CHARCOAL,
+    marginHorizontal: Spacing.gutter,
+    marginBottom:     Spacing.lg,
+    backgroundColor:  Colors.SURFACE,
+    borderWidth:      2,
+    borderColor:      Colors.INK,
+    borderRadius:     Radius.md,
+    overflow:         'hidden',
+    ...Stamp.md,
   },
-  image:     { height: 80, backgroundColor: FILL },
-  content:   { padding: Spacing.md, gap: Spacing.sm },
-  titleLine: { height: 14, backgroundColor: FILL, width: '70%' },
-  metaLine:  { height: 10, backgroundColor: FILL, width: '40%' },
-});
+  image:     { height: 120, backgroundColor: FILL, borderBottomWidth: 2, borderBottomColor: Colors.INK },
+  content:   { padding: Spacing.lg, gap: Spacing.sm },
+  titleLine: { height: 18, backgroundColor: FILL, width: '70%', borderRadius: 3 },
+  metaLine:  { height: 10, backgroundColor: FILL, width: '40%', borderRadius: 3 },
+}));

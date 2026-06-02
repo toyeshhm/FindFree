@@ -7,7 +7,7 @@ export const messagesService = {
       .from('conversations')
       .select(`
         id, item_id, requester_id, poster_id,
-        last_message, last_message_at, unread_count, updated_at,
+        last_message, last_message_at, requester_unread, poster_unread, updated_at,
         item:items(title, photo_urls),
         requester:user_profiles!conversations_requester_id_fkey(id, name, avatar_url),
         poster:user_profiles!conversations_poster_id_fkey(id, name, avatar_url)
@@ -25,7 +25,7 @@ export const messagesService = {
         participantIds: [row.requester_id, row.poster_id],
         lastMessage:    row.last_message,
         lastMessageAt:  row.last_message_at,
-        unreadCount:    row.unread_count,
+        unreadCount:    row.requester_id === userId ? row.requester_unread : row.poster_unread,
         updatedAt:      row.updated_at,
       };
     });

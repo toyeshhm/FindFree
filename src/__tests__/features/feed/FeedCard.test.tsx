@@ -6,8 +6,10 @@ import type { Item } from '@/types';
 const baseItem: Item = {
   id: '1', title: 'Vintage Desk', description: 'Nice desk', category: 'furniture',
   location: { lat: 37.78, lng: -122.41 }, photoUrls: [], source: 'user',
+  sourceName: 'John Doe',
+  claimType: 'in-store',
   status: 'available', createdAt: new Date().toISOString(),
-  expiresAt: new Date().toISOString(), distanceKm: 1.2,
+  expiresAt: new Date().toISOString(), distanceMi: 1.2,
 };
 
 describe('FeedCard', () => {
@@ -23,13 +25,13 @@ describe('FeedCard', () => {
 
   it('shows distance in meta', () => {
     const { getByText } = render(<FeedCard item={baseItem} index={1} onPress={() => {}} />);
-    expect(getByText(/1\.2 km/)).toBeTruthy();
+    expect(getByText(/1\.2 mi/)).toBeTruthy();
   });
 
   it('is accessible as a button with title + distance label', () => {
     const { getByRole } = render(<FeedCard item={baseItem} index={1} onPress={() => {}} />);
     const btn = getByRole('button');
     expect(btn.props.accessibilityLabel).toContain('Vintage Desk');
-    expect(btn.props.accessibilityLabel).toContain('1.2 km');
+    expect(btn.props.accessibilityLabel).toContain('1.2 mi');
   });
 });

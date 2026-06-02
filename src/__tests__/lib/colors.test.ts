@@ -1,21 +1,23 @@
 import { Colors } from '@/lib/colors';
 
-describe('Colors', () => {
-  it('has 10 tokens', () => {
-    expect(Object.keys(Colors)).toHaveLength(10);
+describe('Colors — Cartographer\'s Cache palette', () => {
+  it('Map Beige parchment is the ground color', () => {
+    expect(Colors.BACKGROUND).toBe('#F3E4C6');
   });
-  it('CHARCOAL is the ground color', () => {
-    expect(Colors.CHARCOAL).toBe('#3D3D39');
+  it('Warm ink is the primary text color', () => {
+    expect(Colors.TEXT_PRIMARY).toBe('#211F18');
   });
-  it('CREAM is the primary text color', () => {
-    expect(Colors.CREAM).toBe('#F5F1E8');
+  it('Antique brass is the primary accent', () => {
+    expect(Colors.ACCENT).toBe('#8A6E32');
   });
-  it('RUST is the single accent', () => {
-    expect(Colors.RUST).toBe('#8B6F47');
+  it('Sealing-wax red exists for stamps and alerts', () => {
+    expect(Colors.SEALING_WAX).toBe('#9E2B25');
   });
   it('no pure black or pure white', () => {
     const values = Object.values(Colors);
     expect(values).not.toContain('#000000');
     expect(values).not.toContain('#FFFFFF');
+    expect(values).not.toContain('#fff');
+    expect(values).not.toContain('#000');
   });
 });

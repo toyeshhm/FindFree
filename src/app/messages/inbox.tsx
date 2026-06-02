@@ -3,11 +3,13 @@ import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Typography, Spacing } from '@/lib';
 import { ConversationRow } from '@/features/messages/ConversationRow';
+import { RopeDivider } from '@/components/motifs';
 import { EmptyState } from '@/components/EmptyState';
 import { SkeletonRow } from '@/components/SkeletonRow';
 import { useConversations } from '@/hooks/useConversations';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useNavigation } from '@/navigation/types';
+import { createStyleSheet } from "@/lib/theme";
 
 export function MessagesInboxScreen() {
   const nav    = useNavigation();
@@ -16,10 +18,18 @@ export function MessagesInboxScreen() {
 
   const { data: convs = [], isLoading } = useConversations(session?.user.id);
 
+  const Header = () => (
+    <View style={styles.header}>
+      <Text style={styles.title}>Dispatches</Text>
+      <Text style={styles.subtitle}>Word from fellow hunters</Text>
+      <RopeDivider style={styles.rope} />
+    </View>
+  );
+
   if (!session) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}><Text style={styles.title}>Messages</Text></View>
+        <Header />
         <EmptyState
           message="Sign up to message posters and claim items."
           actionLabel="Create Account"
@@ -31,7 +41,7 @@ export function MessagesInboxScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}><Text style={styles.title}>Messages</Text></View>
+      <Header />
       {isLoading
         ? Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)
         : (
@@ -49,8 +59,8 @@ export function MessagesInboxScreen() {
             )}
             ListEmptyComponent={
               <EmptyState
-                message="No messages yet."
-                secondary="Message a poster to start a conversation."
+                message="No dispatches yet."
+                secondary="Hail a poster to open the first line."
               />
             }
           />
@@ -60,13 +70,15 @@ export function MessagesInboxScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.CHARCOAL },
+const styles = createStyleSheet((Colors) => ({
+  container: { flex: 1, backgroundColor: Colors.BACKGROUND },
   header: {
     paddingHorizontal: Spacing.gutter,
-    paddingVertical:   Spacing.md,
-    borderBottomWidth: 2,
-    borderBottomColor: Colors.RUST,
+    paddingTop:        Spacing.md,
+    paddingBottom:     Spacing.sm,
+    gap:               Spacing.micro,
   },
-  title: { ...Typography.headline, color: Colors.CREAM },
-});
+  title:    { ...Typography.displayHead, color: Colors.INK },
+  subtitle: { ...Typography.flavorSmall, color: Colors.TEXT_MUTED },
+  rope:     { marginTop: Spacing.sm },
+}));

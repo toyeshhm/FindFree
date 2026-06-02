@@ -1,21 +1,32 @@
 import { supabase } from '@/lib/supabase';
 import type { Item, LatLng, FilterState } from '@/types';
 
+const SOURCE_NAMES: Record<string, string> = {
+  mcdonalds: "McDonald's", starbucks: 'Starbucks', chickfila: 'Chick-fil-A',
+  flipp: 'Flipp', reddit: 'Reddit r/freebies', user: 'Community', facebook: 'Facebook',
+};
+
 function rowToItem(row: any): Item {
+  const source = row.source ?? 'user';
   return {
-    id:          row.id,
-    title:       row.title,
-    description: row.description ?? '',
-    category:    row.category,
-    location:    { lat: row.lat, lng: row.lng, address: row.address },
-    photoUrls:   row.photo_urls ?? [],
-    source:      row.source,
-    sourceId:    row.source_id,
-    userId:      row.user_id,
-    status:      row.status,
-    createdAt:   row.created_at,
-    expiresAt:   row.expires_at,
-    distanceKm:  row.distance_km,
+    id:           row.id,
+    title:        row.title,
+    description:  row.description ?? '',
+    category:     row.category ?? 'food',
+    location:     { lat: row.lat, lng: row.lng, address: row.address },
+    photoUrls:    row.photo_urls ?? [],
+    source,
+    sourceName:   row.source_name ?? SOURCE_NAMES[source] ?? source,
+    sourceId:     row.source_id,
+    userId:       row.user_id,
+    status:       row.status,
+    claimType:    row.claim_type ?? 'in-store',
+    couponCode:   row.coupon_code,
+    claimedCount: row.claimed_count ?? 0,
+    createdAt:    row.created_at,
+    expiresAt:    row.expires_at,
+    distanceKm:   row.distance_km,
+    distanceMi:   row.distance_km != null ? row.distance_km * 0.621371 : undefined,
   };
 }
 

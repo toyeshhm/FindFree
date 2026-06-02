@@ -1,68 +1,84 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay } from 'react-native-reanimated';
+import { View, StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, withDelay,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Typography, Spacing } from '@/lib';
+import { CompassRose } from '@/components/motifs/CompassRose';
+import { RopeDivider } from '@/components/motifs/RopeDivider';
+import { ParchmentOverlay } from '@/components/motifs/ParchmentOverlay';
 import { useNavigation } from '@/navigation/types';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import { createStyleSheet } from "@/lib/theme";
 
 export function SplashScreen() {
   const nav     = useNavigation();
   const insets  = useSafeAreaInsets();
   const reduced = useReducedMotion();
 
+  const compassOpacity  = useSharedValue(0);
   const wordmarkOpacity = useSharedValue(0);
   const taglineOpacity  = useSharedValue(0);
 
   useEffect(() => {
     const dur = reduced ? 0 : 400;
-    wordmarkOpacity.value = withTiming(1, { duration: dur });
-    taglineOpacity.value  = withDelay(reduced ? 0 : 300, withTiming(1, { duration: dur }));
+    compassOpacity.value  = withTiming(1, { duration: dur });
+    wordmarkOpacity.value = withDelay(reduced ? 0 : 200, withTiming(1, { duration: dur }));
+    taglineOpacity.value  = withDelay(reduced ? 0 : 450, withTiming(1, { duration: dur }));
 
     const timer = setTimeout(() => nav.replace('Onboarding'), 2500);
     return () => clearTimeout(timer);
   }, []);
 
+  const compassStyle  = useAnimatedStyle(() => ({ opacity: compassOpacity.value }));
   const wordmarkStyle = useAnimatedStyle(() => ({ opacity: wordmarkOpacity.value }));
   const taglineStyle  = useAnimatedStyle(() => ({ opacity: taglineOpacity.value }));
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <Animated.View style={[styles.compass, compassStyle]}>
+        <CompassRose size={120} settle={!reduced} />
+      </Animated.View>
+
       <Animated.Text style={[styles.wordmark, wordmarkStyle]}>
-        FIND{'\n'}FREE
+        FindFree
       </Animated.Text>
-      <View style={styles.divider} />
+
+      <RopeDivider width={140} style={styles.rope} />
+
       <Animated.Text style={[styles.tagline, taglineStyle]}>
-        Free stuff, nearby.
+        Chart a course to free loot nearby.
       </Animated.Text>
+
+      <ParchmentOverlay />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyleSheet((Colors) => ({
   container: {
     flex:            1,
-    backgroundColor: Colors.CHARCOAL,
+    backgroundColor: Colors.BACKGROUND,
     alignItems:      'center',
     justifyContent:  'center',
-    gap:             Spacing.xl,
+    gap:             Spacing.lg,
+  },
+  compass: {
+    marginBottom: Spacing.sm,
   },
   wordmark: {
-    ...Typography.displayHero,
-    color:         Colors.CREAM,
-    textAlign:     'center',
-    textTransform: 'uppercase',
-    lineHeight:    56,
+    ...Typography.wordmark,
+    color:     Colors.TEXT_PRIMARY,
+    textAlign: 'center',
   },
-  divider: {
-    width:           60,
-    height:          3,
-    backgroundColor: Colors.RUST,
+  rope: {
+    marginVertical: Spacing.xs,
   },
   tagline: {
-    ...Typography.label,
-    color:         Colors.MUTED_ASH,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    ...Typography.flavor,
+    color:      Colors.TEXT_SECONDARY,
+    textAlign:  'center',
+    paddingHorizontal: Spacing.xl,
   },
-});
+}));

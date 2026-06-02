@@ -6,3 +6,4 @@ export * from './Avatar';
 export * from './EmptyState';
 export * from './SkeletonCard';
 export * from './SkeletonRow';
+export * from './motifs';

@@ -1,11 +1,15 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { X } from 'phosphor-react-native';
-import { Colors, Typography, Spacing, Springs } from '@/lib';
+import { Colors, Typography, Spacing, Springs, Stamp, Radius } from '@/lib';
 import { PrimaryButton } from '@/components/PrimaryButton';
-import type { Item } from '@/types';
+import { WaxSeal } from '@/components/motifs/WaxSeal';
+import { RopeDivider } from '@/components/motifs/RopeDivider';
+import { useReducedMotion } from '@/lib/useReducedMotion';
+import type { Item, ClaimType } from '@/types';
+import { createStyleSheet } from "@/lib/theme";
 
 interface ItemPreviewSheetProps {
   item:          Item | null;
@@ -13,83 +17,156 @@ interface ItemPreviewSheetProps {
   onDismiss:     () => void;
 }
 
+const HIDDEN = 240;
+
+const CLAIM_LABELS: Record<ClaimType, string> = {
+  'code':         'CODE',
+  'in-store':     'IN-STORE',
+  'app-required': 'APP REQUIRED',
+  'no-action':    'NO ACTION',
+};
+
 export function ItemPreviewSheet({ item, onViewDetails, onDismiss }: ItemPreviewSheetProps) {
-  const translateY = useSharedValue(item ? 0 : 200);
+  const reduced    = useReducedMotion();
+  const translateY = useSharedValue(item ? 0 : HIDDEN);
+  const opacity    = useSharedValue(item ? 1 : 0);
 
   React.useEffect(() => {
-    translateY.value = withSpring(item ? 0 : 200, Springs.heavy);
-  }, [!!item]);
+    const shown = !!item;
+    if (reduced) {
+      translateY.value = shown ? 0 : HIDDEN;
+      opacity.value    = withTiming(shown ? 1 : 0, { duration: 120 });
+    } else {
+      translateY.value = withSpring(shown ? 0 : HIDDEN, Springs.heavy);
+      opacity.value    = withTiming(shown ? 1 : 0, { duration: 160 });
+    }
+  }, [!!item, reduced]);
 
   const sheetStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
+    opacity:   opacity.value,
   }));
 
   if (!item) return null;
 
-  const distLabel = item.distanceKm != null ? `${item.distanceKm.toFixed(1)} km away` : '';
-  const timeLabel = item.createdAt
-    ? (() => {
-        const mins = Math.floor((Date.now() - new Date(item.createdAt).getTime()) / 60000);
-        return mins < 60 ? `${mins} minutes ago` : `${Math.floor(mins / 60)} hours ago`;
-      })()
-    : '';
+  const distLabel  = item.distanceMi != null ? `${item.distanceMi.toFixed(1)} mi away` : '';
+  const claimLabel = CLAIM_LABELS[item.claimType] ?? 'FREE';
 
   return (
     <Animated.View
       style={[styles.sheet, sheetStyle]}
-      accessibilityLabel={`${item.title}, ${distLabel}, posted ${timeLabel}. Tap to view details.`}
+      accessibilityLabel={`${item.title}, ${distLabel}. Tap to view deal.`}
     >
-      <View style={styles.thumb}>
-        {item.photoUrls[0]
-          ? <Image source={{ uri: item.photoUrls[0] }} style={StyleSheet.absoluteFill} contentFit="cover" />
-          : <View style={[StyleSheet.absoluteFill, styles.thumbPlaceholder]} />
-        }
-      </View>
-      <View style={styles.info}>
-        <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-        <Text style={styles.meta} numberOfLines={1}>
-          {distLabel}{distLabel && timeLabel ? ' • ' : ''}{timeLabel}
-        </Text>
-      </View>
-      <View style={styles.actions}>
-        <PrimaryButton label="View Details" onPress={() => onViewDetails(item.id)} showArrow />
-        <Pressable onPress={onDismiss} style={styles.dismiss} accessibilityLabel="Dismiss preview">
-          <X size={18} color={Colors.MUTED_ASH} />
+      {/* curled top edge of the unrolled manifest */}
+      <View style={styles.curl} accessible={false} />
+      <View style={styles.row}>
+        <View style={styles.thumb}>
+          {item.photoUrls[0]
+            ? <Image source={{ uri: item.photoUrls[0] }} style={StyleSheet.absoluteFill} contentFit="cover" />
+            : <View style={[StyleSheet.absoluteFill, styles.thumbPlaceholder]} />
+          }
+          <WaxSeal label="FREE" size={34} style={styles.seal} />
+        </View>
+        <View style={styles.info}>
+          <Text style={styles.sourceName} numberOfLines={1}>{item.sourceName}</Text>
+          <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+          <View style={styles.metaRow}>
+            {distLabel ? (
+              <Text style={styles.distance}>{distLabel}</Text>
+            ) : null}
+            <View style={styles.claimBadge}>
+              <Text style={styles.claimBadgeText}>{claimLabel}</Text>
+            </View>
+          </View>
+        </View>
+        <Pressable
+          onPress={onDismiss}
+          style={styles.dismiss}
+          accessibilityLabel="Dismiss preview"
+          accessibilityRole="button"
+        >
+          <X size={18} color={Colors.TEXT_SECONDARY} weight="bold" />
         </Pressable>
       </View>
+      <RopeDivider style={styles.rope} />
+      <PrimaryButton label="View Deal" onPress={() => onViewDetails(item.id)} showArrow fullWidth />
     </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyleSheet((Colors) => ({
   sheet: {
     position:        'absolute',
-    bottom:          0,
-    left:            0,
-    right:           0,
-    height:          110,
-    backgroundColor: Colors.MID_CHARCOAL,
-    borderTopWidth:  2,
-    borderTopColor:  Colors.RUST,
-    flexDirection:   'row',
-    alignItems:      'center',
-    padding:         Spacing.md,
-    gap:             Spacing.md,
+    bottom:          Spacing.safeBottom + Spacing.md,
+    left:            Spacing.gutter,
+    right:           Spacing.gutter,
+    backgroundColor: Colors.SURFACE,
+    borderRadius:    Radius.lg,
+    borderWidth:     2,
+    borderColor:     Colors.INK,
+    padding:         Spacing.base,
+    gap:             Spacing.sm,
+    ...Stamp.lg,
+  },
+  curl: {
+    alignSelf:       'center',
+    width:           44,
+    height:          4,
+    borderRadius:    Radius.pill,
+    backgroundColor: Colors.ROPE,
+    opacity:         0.6,
+    marginBottom:    Spacing.xs,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           Spacing.md,
   },
   thumb: {
-    width:           60,
-    height:          60,
-    backgroundColor: Colors.RUST,
+    width:           64,
+    height:          64,
+    backgroundColor: Colors.SURFACE_HOVER,
+    borderRadius:    Radius.md,
+    borderWidth:     2,
+    borderColor:     Colors.INK,
     overflow:        'hidden',
   },
   thumbPlaceholder: {
-    borderWidth:  2,
-    borderStyle:  'dashed',
-    borderColor:  Colors.RUST_LIGHT,
+    backgroundColor: Colors.SURFACE_DEEP,
   },
-  info:    { flex: 1, gap: 4 },
-  title:   { ...Typography.label, color: Colors.CREAM, fontWeight: '700' },
-  meta:    { ...Typography.tinyLabel, color: Colors.MUTED_ASH, fontVariant: ['tabular-nums'] },
-  actions: { gap: Spacing.sm, alignItems: 'flex-end' },
-  dismiss: { padding: Spacing.sm },
-});
+  seal: {
+    position: 'absolute',
+    bottom:   -4,
+    right:    -4,
+  },
+  info:       { flex: 1, gap: 3 },
+  sourceName: { ...Typography.caption, color: Colors.ACCENT },
+  title:      { ...Typography.subheading, color: Colors.TEXT_PRIMARY },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           6,
+    flexWrap:      'wrap',
+  },
+  distance: { ...Typography.caption, color: Colors.TEXT_MUTED },
+  claimBadge: {
+    backgroundColor: Colors.SEALING_WAX,
+    paddingHorizontal: 6,
+    paddingVertical:   2,
+    borderRadius:      Radius.sm,
+  },
+  claimBadgeText: {
+    ...Typography.caption,
+    color:      Colors.SURFACE_LIGHT,
+    fontWeight: '700',
+    fontSize:   10,
+  },
+  rope:    { marginVertical: Spacing.xs },
+  dismiss: {
+    padding:    Spacing.sm,
+    minWidth:   44,
+    minHeight:  44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+}));

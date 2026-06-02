@@ -3,12 +3,14 @@
     "name": "FindFree",
     "slug": "findfree",
     "entryPoint": "src/index.tsx",
+    "scheme": "findfree",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.findfree"
     },
     "android": {
       "adaptiveIcon": {
@@ -22,19 +24,29 @@
         "googleMaps": {
           "apiKey": ""
         }
-      }
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-image",
       [
         "expo-location",
         {
           "locationWhenInUsePermission": "FindFree uses your location to show nearby free items."
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FindFree needs access to your photos so you can attach images to your listings."
+        }
+      ],
+      "expo-web-browser"
     ]
   }
 }

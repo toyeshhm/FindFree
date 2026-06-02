@@ -1,18 +1,27 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { SecondaryButton } from './SecondaryButton';
+import { CompassRose } from './motifs/CompassRose';
 import { Colors, Typography, Spacing } from '@/lib';
+import { createStyleSheet } from "@/lib/theme";
 
 interface EmptyStateProps {
   message: string;
   secondary?: string;
   actionLabel?: string;
   onAction?: () => void;
+  /** show the compass motif above the message (default true) */
+  icon?: boolean;
 }
 
-export function EmptyState({ message, secondary, actionLabel, onAction }: EmptyStateProps) {
+/**
+ * Empty states guide rather than abandon. A settling compass over an
+ * aged-ledger line of copy, with an optional way forward.
+ */
+export function EmptyState({ message, secondary, actionLabel, onAction, icon = true }: EmptyStateProps) {
   return (
     <View style={styles.container}>
+      {icon && <CompassRose size={88} settle />}
       <Text style={styles.message}>{message}</Text>
       {secondary && <Text style={styles.secondary}>{secondary}</Text>}
       {actionLabel && onAction && (
@@ -22,23 +31,25 @@ export function EmptyState({ message, secondary, actionLabel, onAction }: EmptyS
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createStyleSheet((Colors) => ({
   container: {
-    flex:           1,
-    alignItems:     'center',
+    flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    padding:        Spacing.hero,
-    gap:            Spacing.md,
+    paddingHorizontal: Spacing.hero,
+    paddingVertical: Spacing.xxl,
+    gap: Spacing.md,
   },
   message: {
-    ...Typography.subheading,
-    color:     Colors.CREAM,
+    ...Typography.headline,
+    color: Colors.TEXT_PRIMARY,
     textAlign: 'center',
+    marginTop: Spacing.sm,
   },
   secondary: {
-    ...Typography.body,
-    color:     Colors.MUTED_ASH,
+    ...Typography.flavorSmall,
+    color: Colors.TEXT_SECONDARY,
     textAlign: 'center',
   },
-  action: { marginTop: Spacing.sm },
-});
+  action: { marginTop: Spacing.base },
+}));

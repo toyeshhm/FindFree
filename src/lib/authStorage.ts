@@ -1,25 +1,29 @@
-import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
-import { MMKV } from 'react-native-mmkv';
 
-const KEY_ID = 'ff-auth-enc-key';
-let _mmkv: MMKV | undefined;
-
-async function getMmkv(): Promise<MMKV> {
-  if (_mmkv) return _mmkv;
-  let encKey = await SecureStore.getItemAsync(KEY_ID);
-  if (!encKey) {
-    const bytes = Crypto.getRandomBytes(32);
-    encKey = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-    await SecureStore.setItemAsync(KEY_ID, encKey);
-  }
-  _mmkv = new MMKV({ id: 'ff-auth', encryptionKey: encKey });
-  return _mmkv;
-}
-
-// Supabase SupportedStorage accepts async getItem/setItem/removeItem
+// Supabase SupportedStorage accepts async getItem/setItem/removeItem.
+// We use expo-secure-store which is officially supported in both Expo Go
+// and bare native development builds, providing robust secure storage.
 export const authStorage = {
-  getItem:    async (key: string) => (await getMmkv()).getString(key) ?? null,
-  setItem:    async (key: string, value: string) => { (await getMmkv()).set(key, value); },
-  removeItem: async (key: string) => { (await getMmkv()).delete(key); },
+  getItem: async (key: string): Promise<string | null> => {
+    try {
+      return await SecureStore.getItemAsync(key);
+    } catch (e) {
+      console.warn('authStorage.getItem failed:', e);
+      return null;
+    }
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    try {
+      await SecureStore.setItemAsync(key, value);
+    } catch (e) {
+      console.warn('authStorage.setItem failed:', e);
+    }
+  },
+  removeItem: async (key: string): Promise<void> => {
+    try {
+      await SecureStore.deleteItemAsync(key);
+    } catch (e) {
+      console.warn('authStorage.removeItem failed:', e);
+    }
+  },
 };

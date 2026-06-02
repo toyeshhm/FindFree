@@ -1,24 +1,27 @@
 import React from 'react';
-import { View, Text, FlatList, Pressable, Alert, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Alert, StyleSheet, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Colors, Typography, Spacing } from '@/lib';
+import { useQuery } from '@tanstack/react-query';
+import {
+  Gear, MapPin, Link, Info, SignOut, CaretRight, Palette, BellRinging
+} from 'phosphor-react-native';
+import { Colors, Typography, Spacing, Radius } from '@/lib';
 import { ProfileHeader } from '@/features/profile/ProfileHeader';
-import { FeedCard } from '@/features/feed/FeedCard';
-import { PrimaryButton } from '@/components/PrimaryButton';
 import { EmptyState } from '@/components/EmptyState';
-import { SkeletonCard } from '@/components/SkeletonCard';
+import { ParchmentOverlay } from '@/components/motifs/ParchmentOverlay';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { usersService } from '@/services/users';
-import { itemsService } from '@/services/items';
+import { useSavedItems } from '@/hooks/useSavedItems';
 import { useNavigation } from '@/navigation/types';
+import { useThemeStore } from '@/stores/useThemeStore';
+import { createStyleSheet } from "@/lib/theme";
 
 export function ProfileScreen() {
   const nav    = useNavigation();
   const insets = useSafeAreaInsets();
-  const qc     = useQueryClient();
 
   const { session, signOut } = useAuthStore();
+  const { themeName, setTheme } = useThemeStore();
 
   const { data: user } = useQuery({
     queryKey: ['user', session?.user.id],
@@ -26,86 +29,205 @@ export function ProfileScreen() {
     enabled:  !!session,
   });
 
-  const { data: myItems = [], isLoading } = useQuery({
-    queryKey: ['items', 'mine', session?.user.id],
-    queryFn:  () => itemsService.getSaved(session!.user.id),
-    enabled:  !!session,
-  });
+  const { data: savedItems = [] } = useSavedItems(session?.user.id);
 
-  const deleteMutation = useMutation({
-    mutationFn: (itemId: string) => itemsService.delete(itemId),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['items', 'mine'] }),
-  });
-
-  const handleDelete = (itemId: string) => {
-    Alert.alert('Remove this listing?', 'This will permanently remove your item.', [
-      { text: 'Keep It', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate(itemId) },
-    ]);
-  };
+  const savedCount   = savedItems.length;
+  const claimedCount = 0;
+  const dollarSaved  = 0;
 
   if (!session) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <EmptyState
-          message="Sign in to view your profile."
-          actionLabel="Create Account"
+          message="Sign aboard to view your papers."
+          secondary="Join the crew to log caches and keep your stash."
+          actionLabel="Join the Crew"
           onAction={() => nav.navigate('Auth', { screen: 'SignUp' })}
         />
+        <ParchmentOverlay />
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {user && <ProfileHeader user={user} />}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Your Listings</Text>
-        <PrimaryButton
-          label="Post Your First Item"
-          onPress={() => nav.navigate('PostItem')}
-          showArrow
-        />
-      </View>
-      {isLoading
-        ? <SkeletonCard />
-        : myItems.length === 0
-          ? <EmptyState message="You haven't posted anything yet." />
-          : (
-            <FlatList
-              data={myItems}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item, index }) => (
-                <FeedCard item={item} index={index} onPress={(id) => nav.navigate('ItemDetail', { itemId: id })} />
-              )}
-              contentContainerStyle={{ paddingBottom: 80 }}
-            />
-          )
-      }
-      <View style={styles.footer}>
-        <Pressable onPress={signOut} accessibilityRole="button" accessibilityLabel="Sign out">
-          <Text style={styles.signOut}>Sign Out</Text>
-        </Pressable>
-      </View>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {user && <ProfileHeader user={{...user, name: session?.user.user_metadata?.name || user.name}} />}
+
+        {/* Stats Row */}
+        <View style={styles.statsRow}>
+          <View style={[styles.statCell, styles.statCellDivided]}>
+            <Text style={styles.statNumber}>
+              {savedCount > 0 ? savedCount : '—'}
+            </Text>
+            <Text style={styles.statLabel}>Deals Saved</Text>
+          </View>
+          <View style={[styles.statCell, styles.statCellDivided]}>
+            <Text style={styles.statNumber}>
+              {claimedCount > 0 ? claimedCount : '—'}
+            </Text>
+            <Text style={styles.statLabel}>Deals Claimed</Text>
+          </View>
+          <View style={styles.statCell}>
+            <Text style={styles.statNumber}>
+              {dollarSaved > 0 ? `$${dollarSaved}` : '—'}
+            </Text>
+            <Text style={styles.statLabel}>$ Saved</Text>
+          </View>
+        </View>
+
+        <Text style={styles.settingsSectionTitle}>SETTINGS</Text>
+        <View style={styles.settingsList}>
+          <SettingsRow
+            icon={<Gear size={18} color={Colors.ACCENT} />}
+            label="Account Settings"
+            onPress={() => nav.navigate('AccountSettings')}
+            showCaret
+            divided
+          />
+          <SettingsRow
+            icon={<BellRinging size={18} color={Colors.ACCENT} />}
+            label="Notification Settings"
+            onPress={() => nav.navigate('NotificationSettings')}
+            showCaret
+            divided
+          />
+          <SettingsRow
+            icon={<Palette size={18} color={Colors.ACCENT} />}
+            label={`Theme: ${themeName === 'dark' ? 'Midnight' : themeName.charAt(0).toUpperCase() + themeName.slice(1)}`}
+            onPress={() => nav.navigate('ThemeSettings')}
+            showCaret
+            divided
+          />
+          <SettingsRow
+            icon={<Info size={18} color={Colors.ACCENT} />}
+            label="About FindFree"
+            onPress={() => Alert.alert('FindFree v1.0', 'Aggregating free deals near you.')}
+            showCaret
+            divided
+          />
+          <SettingsRow
+            icon={<SignOut size={18} color={Colors.SEALING_WAX} />}
+            label="Sign Out"
+            labelStyle={styles.signOutLabel}
+            onPress={signOut}
+            showCaret={false}
+            divided
+          />
+        </View>
+      </ScrollView>
+      <ParchmentOverlay />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.CHARCOAL },
-  section: {
-    paddingHorizontal: Spacing.gutter,
-    paddingVertical:   Spacing.md,
-    gap:               Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.DIVIDER,
+interface SettingsRowProps {
+  icon: React.ReactNode;
+  label: string;
+  labelStyle?: object;
+  onPress: () => void;
+  showCaret: boolean;
+  divided?: boolean;
+}
+
+function SettingsRow({ icon, label, labelStyle, onPress, showCaret, divided }: SettingsRowProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.settingsRow,
+        divided && styles.settingsRowDivided,
+        pressed && styles.settingsRowPressed,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <View style={styles.settingsRowLeft}>
+        {icon}
+        <Text style={[styles.settingsRowLabel, labelStyle]}>{label}</Text>
+      </View>
+      {showCaret && <CaretRight size={14} color={Colors.TEXT_MUTED} />}
+    </Pressable>
+  );
+}
+
+const styles = createStyleSheet((Colors) => ({
+  container:     { flex: 1, backgroundColor: Colors.BACKGROUND },
+  scrollContent: { paddingBottom: 120 },
+
+  // Stats
+  statsRow: {
+    flexDirection:   'row',
+    marginHorizontal: Spacing.base,
+    marginVertical:   Spacing.md,
+    backgroundColor:  Colors.SURFACE,
+    borderWidth:      2,
+    borderColor:      Colors.INK,
+    borderRadius:     Radius.md,
+    overflow:         'hidden',
   },
-  sectionTitle: { ...Typography.subheading, color: Colors.CREAM, fontWeight: '700' },
-  footer: {
-    paddingHorizontal: Spacing.gutter,
-    paddingVertical:   Spacing.base,
-    borderTopWidth:    1,
-    borderTopColor:    Colors.DIVIDER,
+  statCell: {
+    flex:        1,
+    padding:     14,
+    alignItems:  'center',
   },
-  signOut: { ...Typography.label, color: Colors.RUST_LIGHT },
-});
+  statCellDivided: {
+    borderRightWidth: 2,
+    borderRightColor: Colors.INK,
+  },
+  statNumber: {
+    ...Typography.sectionTitle,
+    color:        Colors.ACCENT,
+    marginBottom: 2,
+  },
+  statLabel: {
+    ...Typography.caption,
+    color:     Colors.TEXT_MUTED,
+    textAlign: 'center',
+  },
+
+  // Settings
+  settingsSectionTitle: {
+    ...Typography.tinyLabel,
+    color:        Colors.TEXT_MUTED,
+    marginLeft:   Spacing.base,
+    marginBottom: 4,
+    marginTop:    20,
+  },
+  settingsList: {
+    backgroundColor: Colors.SURFACE,
+    borderWidth:     2,
+    borderColor:     Colors.INK,
+    borderRadius:    Radius.md,
+    marginHorizontal: Spacing.base,
+    overflow:        'hidden',
+  },
+  settingsRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    paddingHorizontal: Spacing.base,
+    paddingVertical:   14,
+    minHeight:         52,
+  },
+  settingsRowDivided: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.BORDER,
+  },
+  settingsRowPressed: { backgroundColor: Colors.SURFACE_HOVER },
+  settingsRowLeft: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           12,
+  },
+  settingsRowLabel: {
+    ...Typography.body,
+    color: Colors.TEXT_PRIMARY,
+  },
+  signOutLabel: {
+    color: Colors.SEALING_WAX,
+  },
+}));

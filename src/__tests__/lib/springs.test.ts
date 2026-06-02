@@ -1,8 +1,11 @@
 import { Springs } from '@/lib/springs';
 
 describe('Springs', () => {
-  it('has 4 presets', () => {
-    expect(Object.keys(Springs)).toHaveLength(4);
+  it('has the 6 motion presets', () => {
+    expect(Object.keys(Springs)).toEqual(
+      expect.arrayContaining(['standard', 'heavy', 'snappy', 'gentle', 'stamp', 'drop']),
+    );
+    expect(Object.keys(Springs)).toHaveLength(6);
   });
   it('all presets have stiffness, damping, mass', () => {
     for (const preset of Object.values(Springs)) {

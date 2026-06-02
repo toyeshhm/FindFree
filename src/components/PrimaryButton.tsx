@@ -1,9 +1,10 @@
 import React from 'react';
-import { Text, StyleSheet, View, type ViewStyle } from 'react-native';
+import { Text, StyleSheet, View, ActivityIndicator, type ViewStyle } from 'react-native';
 import { ArrowRight } from 'phosphor-react-native';
 import { PressableScale } from './PressableScale';
 import { HapticFeedback } from '@/lib/haptics';
-import { Colors, Typography, Spacing } from '@/lib';
+import { Colors, Typography, Spacing, Stamp, Radius } from '@/lib';
+import { createStyleSheet } from "@/lib/theme";
 
 interface PrimaryButtonProps {
   label: string;
@@ -11,68 +12,80 @@ interface PrimaryButtonProps {
   fullWidth?: boolean;
   showArrow?: boolean;
   disabled?: boolean;
+  loading?: boolean;
   style?: ViewStyle;
   accessibilityLabel?: string;
 }
 
+/**
+ * Brass plaque, ink stroke, engraved Cinzel label. Presses into its hard shadow
+ * like a wax seal being stamped.
+ */
 export const PrimaryButton = React.memo(function PrimaryButton({
-  label, onPress, fullWidth, showArrow, disabled, style, accessibilityLabel,
+  label, onPress, fullWidth, showArrow, disabled, loading, style, accessibilityLabel,
 }: PrimaryButtonProps) {
   const handlePress = () => {
-    HapticFeedback.tap();
+    HapticFeedback.impact();
     onPress();
   };
+
+  const isDisabled = disabled || loading;
 
   return (
     <PressableScale
       onPress={handlePress}
-      disabled={disabled}
-      style={[styles.container, fullWidth && styles.fullWidth, disabled && styles.disabled, style]}
+      disabled={isDisabled}
+      variant="stamp"
+      style={[styles.shell, fullWidth && styles.fullWidth, isDisabled && styles.disabled, style]}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityState={{ disabled: !!disabled }}
+      accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
     >
-      <Text style={styles.label} numberOfLines={1} accessible={false}>
-        {label.toUpperCase()}
-      </Text>
-      {showArrow && (
-        <View style={styles.iconZone} accessible={false}>
-          <ArrowRight size={16} color={Colors.CREAM} weight="bold" />
-        </View>
-      )}
+      <View style={styles.core}>
+        {loading ? (
+          <ActivityIndicator size="small" color={Colors.SURFACE_LIGHT} />
+        ) : (
+          <>
+            <Text style={styles.label} numberOfLines={1} accessible={false}>
+              {label.toUpperCase()}
+            </Text>
+            {showArrow && (
+              <View style={styles.iconZone} accessible={false}>
+                <ArrowRight size={15} color={Colors.SURFACE_LIGHT} weight="bold" />
+              </View>
+            )}
+          </>
+        )}
+      </View>
     </PressableScale>
   );
 });
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    backgroundColor: Colors.RUST,
-    borderWidth:   2,
-    borderColor:   Colors.RUST,
-    paddingVertical: 14,
-    paddingLeft:   Spacing.base,
-    paddingRight:  4,
-    minHeight:     48,
+const styles = createStyleSheet((Colors) => ({
+  shell: {
+    backgroundColor: Colors.ACCENT,
+    borderRadius: Radius.md,
+    borderWidth: 2,
+    borderColor: Colors.INK,
+    alignSelf: 'flex-start',
+    ...Stamp.md,
   },
-  fullWidth:  { width: '100%' },
-  disabled:   { opacity: 0.5 },
+  fullWidth: { alignSelf: 'stretch', width: '100%' },
+  disabled: { opacity: 0.45 },
+  core: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.xl,
+    minHeight: 54,
+    gap: Spacing.sm,
+  },
   label: {
     ...Typography.label,
-    color:         Colors.CREAM,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    flex:          1,
+    color: Colors.SURFACE_LIGHT,
+    fontSize: 14,
+    letterSpacing: 1.5,
   },
-  iconZone: {
-    width:  32,
-    height: 32,
-    backgroundColor:  'rgba(61, 61, 57, 0.3)',
-    borderLeftWidth:  1,
-    borderLeftColor:  'rgba(61, 61, 57, 0.3)',
-    alignItems:       'center',
-    justifyContent:   'center',
-    marginLeft:       Spacing.sm,
-  },
-});
+  iconZone: { alignItems: 'center', justifyContent: 'center' },
+}));

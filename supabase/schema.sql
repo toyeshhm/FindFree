@@ -1,23 +1,24 @@
--- FindFree — Supabase Schema
--- Apply in the Supabase SQL Editor (Dashboard → SQL Editor → New Query).
--- Run schema.sql first, then seed.sql for development data.
+-- FindFree — Idempotent Migration
+-- Safe to run multiple times. Creates everything if missing, skips if already present.
 
--- Enable PostGIS (must be done first)
+-- ─── Extensions ───────────────────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS postgis;
 
 -- ─── Tables ───────────────────────────────────────────────────────────────────
 
--- User profiles (extends auth.users — auto-created on sign-up via trigger)
-CREATE TABLE user_profiles (
+CREATE TABLE IF NOT EXISTS user_profiles (
   id            UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   name          TEXT NOT NULL DEFAULT 'Anonymous' CHECK (length(name) <= 80),
   avatar_url    TEXT,
   message_count INT  DEFAULT 0,
+  push_token    TEXT,
+  lat           DOUBLE PRECISION,
+  lng           DOUBLE PRECISION,
+  push_radius_miles INT DEFAULT 10,
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Items
-CREATE TABLE items (
+CREATE TABLE IF NOT EXISTS items (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title       TEXT NOT NULL,
   description TEXT DEFAULT '',
@@ -37,36 +38,37 @@ CREATE TABLE items (
   expires_at  TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days')
 );
 
--- Spatial index for get_nearby_items RPC
-CREATE INDEX items_location_idx  ON items USING GIST(ST_Point(lng, lat));
--- Partial index for the most common status filter
-CREATE INDEX items_status_idx    ON items (status) WHERE status = 'available';
+CREATE INDEX IF NOT EXISTS items_location_idx ON items USING GIST(ST_Point(lng, lat));
+CREATE INDEX IF NOT EXISTS items_status_idx   ON items (status) WHERE status = 'available';
+CREATE INDEX IF NOT EXISTS idx_items_user_id  ON items (user_id);
 
--- Saved items (junction table)
-CREATE TABLE saved_items (
+CREATE TABLE IF NOT EXISTS saved_items (
   user_id    UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   item_id    UUID REFERENCES items(id)      ON DELETE CASCADE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (user_id, item_id)
 );
+CREATE INDEX IF NOT EXISTS idx_saved_items_user_id ON saved_items (user_id);
+CREATE INDEX IF NOT EXISTS idx_saved_items_item_id ON saved_items (item_id);
 
--- Conversations (one per item + requester pair)
-CREATE TABLE conversations (
+CREATE TABLE IF NOT EXISTS conversations (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   item_id          UUID REFERENCES items(id)      ON DELETE CASCADE,
   requester_id     UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   poster_id        UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   last_message     TEXT,
   last_message_at  TIMESTAMPTZ,
-  requester_unread INT DEFAULT 0,   -- unread count for the requester
-  poster_unread    INT DEFAULT 0,   -- unread count for the poster
+  requester_unread INT DEFAULT 0,
+  poster_unread    INT DEFAULT 0,
   created_at       TIMESTAMPTZ DEFAULT NOW(),
   updated_at       TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (item_id, requester_id)
 );
+CREATE INDEX IF NOT EXISTS idx_conversations_item_id ON conversations (item_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_requester_id ON conversations (requester_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_poster_id ON conversations (poster_id);
 
--- Messages
-CREATE TABLE messages (
+CREATE TABLE IF NOT EXISTS messages (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
   sender_id       UUID REFERENCES auth.users(id)    ON DELETE CASCADE,
@@ -74,14 +76,36 @@ CREATE TABLE messages (
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Index for loading a conversation's message history efficiently
-CREATE INDEX messages_conversation_idx ON messages (conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages (conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages (sender_id);
+CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages (conversation_id, created_at);
 
 -- ─── Triggers ─────────────────────────────────────────────────────────────────
 
--- Auto-create user profile on sign-up.
--- SECURITY DEFINER is required (fires on auth.users, inserts into public.user_profiles).
--- search_path is pinned to prevent search-path hijack.
+CREATE OR REPLACE FUNCTION get_users_to_notify(
+  item_lat DOUBLE PRECISION,
+  item_lng DOUBLE PRECISION,
+  poster_id UUID
+)
+RETURNS TABLE (
+  id UUID,
+  push_token TEXT
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    u.id, u.push_token
+  FROM user_profiles u
+  WHERE u.push_token IS NOT NULL
+    AND u.id != poster_id
+    AND u.lat IS NOT NULL
+    AND u.lng IS NOT NULL
+    -- ST_DistanceSphere returns meters. (1 mile = 1609.34 meters)
+    AND (ST_DistanceSphere(ST_Point(u.lng, u.lat), ST_Point(item_lng, item_lat)) / 1609.34) <= COALESCE(u.push_radius_miles, 10);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Auto-create user_profiles row when a new user signs up
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -93,17 +117,18 @@ BEGIN
   VALUES (
     NEW.id,
     COALESCE(substring(NEW.raw_user_meta_data->>'name', 1, 80), 'Anonymous')
-  );
+  )
+  ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
 END;
 $$;
 
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
--- Update conversation metadata on new message.
--- Increments only the OTHER participant's unread counter (not the sender's).
+-- Update conversation metadata whenever a new message is sent
 CREATE OR REPLACE FUNCTION update_conversation_on_message()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
@@ -124,6 +149,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS on_message_inserted ON messages;
 CREATE TRIGGER on_message_inserted
   AFTER INSERT ON messages
   FOR EACH ROW EXECUTE FUNCTION update_conversation_on_message();
@@ -174,6 +200,7 @@ LANGUAGE SQL STABLE AS $$
     )
     AND (get_nearby_items.category IS NULL OR i.category = get_nearby_items.category)
     AND (max_age_hours IS NULL OR i.created_at > NOW() - (max_age_hours * INTERVAL '1 hour'))
+    AND (i.expires_at IS NULL OR i.expires_at > NOW())
   ORDER BY distance_km
   LIMIT 100;
 $$;
@@ -186,30 +213,64 @@ ALTER TABLE saved_items   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages      ENABLE ROW LEVEL SECURITY;
 
--- user_profiles: anyone can read; owner can insert their own row; owner can update
+-- user_profiles
+DROP POLICY IF EXISTS "profiles_select" ON user_profiles;
+DROP POLICY IF EXISTS "profiles_insert" ON user_profiles;
+DROP POLICY IF EXISTS "profiles_update" ON user_profiles;
+
+CREATE POLICY "Anyone can view likes" ON community_post_likes FOR SELECT USING (true);
+CREATE POLICY "Users can insert likes" ON community_post_likes FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete likes" ON community_post_likes FOR DELETE USING (auth.uid() = user_id);
+
+CREATE OR REPLACE FUNCTION increment_like_count(row_id UUID) RETURNS void AS $$
+BEGIN
+  UPDATE community_posts SET like_count = like_count + 1 WHERE id = row_id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION decrement_like_count(row_id UUID) RETURNS void AS $$
+BEGIN
+  UPDATE community_posts SET like_count = like_count - 1 WHERE id = row_id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION increment_comment_count(row_id UUID) RETURNS void AS $$
+BEGIN
+  UPDATE community_posts SET comment_count = comment_count + 1 WHERE id = row_id;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE POLICY "profiles_select" ON user_profiles FOR SELECT USING (true);
 CREATE POLICY "profiles_insert" ON user_profiles FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "profiles_update" ON user_profiles FOR UPDATE
   USING     (auth.uid() = id)
   WITH CHECK (auth.uid() = id);
 
--- items: unauthenticated can read available items; authenticated owner can insert/update
--- items_insert: auth.uid() IS NOT NULL prevents NULL = NULL passing as true for anon callers
+-- items
+DROP POLICY IF EXISTS "items_select" ON items;
+DROP POLICY IF EXISTS "items_insert" ON items;
+DROP POLICY IF EXISTS "items_update" ON items;
+
 CREATE POLICY "items_select" ON items FOR SELECT USING (status != 'deleted');
 CREATE POLICY "items_insert" ON items FOR INSERT
   WITH CHECK (auth.uid() IS NOT NULL AND auth.uid() = user_id);
--- WITH CHECK pins owner on write to prevent ownership transfer
 CREATE POLICY "items_update" ON items FOR UPDATE
   USING     (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
--- saved_items: only own saves
+-- saved_items
+DROP POLICY IF EXISTS "saved_select" ON saved_items;
+DROP POLICY IF EXISTS "saved_insert" ON saved_items;
+DROP POLICY IF EXISTS "saved_delete" ON saved_items;
+
 CREATE POLICY "saved_select" ON saved_items FOR SELECT USING  (auth.uid() = user_id);
 CREATE POLICY "saved_insert" ON saved_items FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "saved_delete" ON saved_items FOR DELETE USING  (auth.uid() = user_id);
 
--- conversations: participants only on select; requester creates — poster_id must match item owner
--- auth.uid() <> poster_id prevents self-conversations; item status = 'available' prevents orphaned convs
+-- conversations
+DROP POLICY IF EXISTS "conv_select" ON conversations;
+DROP POLICY IF EXISTS "conv_insert" ON conversations;
+
 CREATE POLICY "conv_select" ON conversations FOR SELECT
   USING (auth.uid() = requester_id OR auth.uid() = poster_id);
 CREATE POLICY "conv_insert" ON conversations FOR INSERT
@@ -222,7 +283,10 @@ CREATE POLICY "conv_insert" ON conversations FOR INSERT
     )
   );
 
--- messages: conversation participants only
+-- messages
+DROP POLICY IF EXISTS "msg_select" ON messages;
+DROP POLICY IF EXISTS "msg_insert" ON messages;
+
 CREATE POLICY "msg_select" ON messages FOR SELECT
   USING (
     EXISTS (
@@ -240,3 +304,21 @@ CREATE POLICY "msg_insert" ON messages FOR INSERT
         AND (c.requester_id = auth.uid() OR c.poster_id = auth.uid())
     )
   );
+
+-- ─── Storage bucket for item photos ──────────────────────────────────────────
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('item-photos', 'item-photos', true)
+ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "item_photos_select"  ON storage.objects;
+DROP POLICY IF EXISTS "item_photos_insert"  ON storage.objects;
+DROP POLICY IF EXISTS "item_photos_delete"  ON storage.objects;
+
+CREATE POLICY "item_photos_select" ON storage.objects FOR SELECT
+  USING (bucket_id = 'item-photos');
+
+CREATE POLICY "item_photos_insert" ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'item-photos' AND auth.uid() IS NOT NULL);
+
+CREATE POLICY "item_photos_delete" ON storage.objects FOR DELETE
+  USING (bucket_id = 'item-photos' AND auth.uid() IS NOT NULL);
