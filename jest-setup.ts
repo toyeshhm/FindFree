@@ -9,6 +9,7 @@ jest.mock('react-native-reanimated', () => {
   const withSpring = (val: any) => val;
   const withTiming = (val: any) => val;
   const withRepeat = (val: any) => val;
+  const withDelay = (_delay: any, val: any) => val;
 
   const Animated = {
     View,
@@ -23,6 +24,7 @@ jest.mock('react-native-reanimated', () => {
     withSpring,
     withTiming,
     withRepeat,
+    withDelay,
     runOnJS: (fn: any) => fn,
     runOnUI: (fn: any) => fn,
     makeMutable: (init: any) => ({ value: init }),
@@ -67,4 +69,11 @@ jest.mock('react-native-maps', () => {
   const MapView = ({ children }: any) => React.createElement('View', null, children);
   const Marker = ({ children }: any) => React.createElement('View', null, children);
   return { default: MapView, Marker };
+});
+
+jest.mock('expo-image', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const Image = (props: any) => React.createElement(View, props);
+  return { Image };
 });
