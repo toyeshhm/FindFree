@@ -1,28 +1,41 @@
 import { itemsService } from '@/services/items';
 
-jest.mock('@/lib/supabase', () => ({
-  supabase: {
-    rpc: jest.fn().mockResolvedValue({ data: [], error: null }),
-    from: jest.fn(() => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          single: jest.fn().mockResolvedValue({ data: null, error: null }),
-        })),
-      })),
-    })),
-  },
-}));
+jest.mock('@/lib/supabase', () => {
+  const chain: any = {};
+  const resolved = { data: [], error: null };
+  chain.select = jest.fn(() => chain);
+  chain.neq    = jest.fn(() => chain);
+  chain.eq     = jest.fn(() => chain);
+  chain.gte    = jest.fn(() => chain);
+  chain.order  = jest.fn(() => chain);
+  chain.limit  = jest.fn(() => chain);
+  chain.single = jest.fn().mockResolvedValue({ data: null, error: null });
+  chain.then   = (resolve: any) => Promise.resolve(resolved).then(resolve);
+  chain.catch  = (reject: any) => Promise.resolve(resolved).catch(reject);
+  return {
+    supabase: {
+      rpc:  jest.fn().mockResolvedValue({ data: [], error: null }),
+      from: jest.fn(() => chain),
+    },
+  };
+});
 
 describe('itemsService.getNearby', () => {
-  it('calls get_nearby_items RPC with correct params', async () => {
+  it('queries the items table directly (not RPC)', async () => {
     const { supabase } = require('@/lib/supabase');
     await itemsService.getNearby(
       { lat: 37.78, lng: -122.41 },
       { radiusKm: 5, category: 'furniture' }
     );
-    expect(supabase.rpc).toHaveBeenCalledWith('get_nearby_items', {
-      user_lat: 37.78, user_lng: -122.41,
-      radius_km: 5, category: 'furniture', max_age_hours: null,
-    });
+    expect(supabase.from).toHaveBeenCalledWith('items');
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it('returns an array', async () => {
+    const result = await itemsService.getNearby(
+      { lat: 37.78, lng: -122.41 },
+      { radiusKm: 5 }
+    );
+    expect(Array.isArray(result)).toBe(true);
   });
 });

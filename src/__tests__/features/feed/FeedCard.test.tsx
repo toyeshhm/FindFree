@@ -18,20 +18,22 @@ describe('FeedCard', () => {
     expect(getByText('Vintage Desk')).toBeTruthy();
   });
 
-  it('renders FREE badge', () => {
+  it('renders source name', () => {
     const { getByText } = render(<FeedCard item={baseItem} index={1} onPress={() => {}} />);
-    expect(getByText('FREE')).toBeTruthy();
+    expect(getByText('John Doe')).toBeTruthy();
   });
 
-  it('shows distance in meta', () => {
+  it('shows age in meta row', () => {
     const { getByText } = render(<FeedCard item={baseItem} index={1} onPress={() => {}} />);
-    expect(getByText(/1\.2 mi/)).toBeTruthy();
+    // Card always shows relative age (e.g. "0m ago")
+    expect(getByText(/ago/)).toBeTruthy();
   });
 
-  it('is accessible as a button with title + distance label', () => {
-    const { getByRole } = render(<FeedCard item={baseItem} index={1} onPress={() => {}} />);
-    const btn = getByRole('button');
-    expect(btn.props.accessibilityLabel).toContain('Vintage Desk');
-    expect(btn.props.accessibilityLabel).toContain('1.2 mi');
+  it('is accessible — main card has button role with item title in label', () => {
+    const { getAllByRole } = render(<FeedCard item={baseItem} index={1} onPress={() => {}} />);
+    const buttons = getAllByRole('button');
+    // The first button is the main card press target
+    const mainBtn = buttons[0];
+    expect(mainBtn.props.accessibilityLabel).toContain('Vintage Desk');
   });
 });

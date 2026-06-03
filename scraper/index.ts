@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import fetch from 'node-fetch';
 import * as dotenv from 'dotenv';
 import path from 'path';
+import { scrapeAllFlyers } from './flyer';
+import { discoverWithLLM } from './llm-discovery';
 
 // Load the root .env.local file
 dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
@@ -16,13 +18,18 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Helper to determine category based on text
 function inferCategory(text: string): string {
   const t = text.toLowerCase();
-  if (t.includes('food') || t.includes('burger') || t.includes('taco') || t.includes('meal')) return 'food';
-  if (t.includes('drink') || t.includes('coffee') || t.includes('tea') || t.includes('starbucks')) return 'drinks';
-  if (t.includes('grocery') || t.includes('aldi') || t.includes('kroger')) return 'grocery';
-  if (t.includes('game') || t.includes('steam') || t.includes('playstation')) return 'electronics';
+  if (/food|burger|pizza|taco|chicken|meal|restaurant|dining|breakfast|lunch|dinner|sushi|snack|cookie|donut|fries|bbq/.test(t)) return 'food';
+  if (/drink|coffee|tea|starbucks|dunkin|smoothie|juice|soda|beer|wine|latte|espresso|boba|beverage/.test(t)) return 'drinks';
+  if (/grocery|aldi|kroger|safeway|whole.?foods|trader.?joe|wegmans|publix|costco|produce|organic|cereal|pasta/.test(t)) return 'grocery';
+  if (/phone|laptop|computer|gaming|\bgame\b|steam|xbox|playstation|nintendo|\btv\b|camera|headphone|speaker|tablet|ipad|iphone|android|\btech\b|gadget/.test(t)) return 'electronics';
+  if (/\bcloth|apparel|shirt|pants|shoes|sneaker|dress|jacket|coat|fashion|\bwear\b|sock|underwear|hoodie|jeans/.test(t)) return 'clothing';
+  if (/furniture|sofa|couch|\bchair\b|\btable\b|\bbed\b|\bdesk\b|shelf|bookcase|\blamp\b|mattress/.test(t)) return 'furniture';
+  if (/kitchen|cookware|\bpan\b|\bpot\b|utensil|appliance|blender|mixer|air fryer|\bknife\b/.test(t)) return 'kitchen';
+  if (/\bbook\b|novel|textbook|ebook|kindle|audiobook|magazine|\bcomic\b/.test(t)) return 'books';
+  if (/sport|fitness|\bgym\b|workout|exercise|yoga|running|hiking|cycling|golf|tennis|basketball|football/.test(t)) return 'sports';
+  if (/\btoy\b|lego|puzzle|board.?game|action.?figure|\bdoll\b|stuffed|\bkids\b|children|\bbaby\b/.test(t)) return 'toys';
   return 'other';
 }
 
@@ -36,6 +43,103 @@ function extractTags(text: string): string[] {
   if (t.includes('bogo')) tags.push('bogo');
   if (t.includes('free shipping')) tags.push('free shipping');
   return tags;
+}
+
+// ── Flipp location helpers ─────────────────────────────────────────────────
+
+const _locCache: Record<string, { lat: number; lng: number } | null> = {};
+
+async function getMerchantLocation(name: string, fallback: { lat: number; lng: number }): Promise<{ lat: number; lng: number }> {
+  if (_locCache[name] !== undefined) return _locCache[name] ?? fallback;
+  const key = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
+  if (!key) { _locCache[name] = null; return fallback; }
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(name)}&location=${fallback.lat},${fallback.lng}&radius=10000&key=${key}`;
+    const json = await (await fetch(url)).json() as any;
+    if (json.results?.length > 0) {
+      _locCache[name] = json.results[0].geometry.location;
+      return _locCache[name] as { lat: number; lng: number };
+    }
+  } catch { /* ignore */ }
+  _locCache[name] = null;
+  return fallback;
+}
+
+async function getPostalCode(lat: number, lng: number): Promise<string> {
+  const key = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY;
+  if (!key) return '10001';
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}`;
+    const json = await (await fetch(url)).json() as any;
+    const zip = (json.results?.[0]?.address_components ?? []).find((c: any) => c.types.includes('postal_code'));
+    if (zip) return zip.short_name;
+  } catch { /* ignore */ }
+  return '10001';
+}
+
+// ── Flipp flyer scraper ────────────────────────────────────────────────────
+
+async function scrapeFlipp(location: { lat: number; lng: number }): Promise<any[]> {
+  try {
+    const postalCode = await getPostalCode(location.lat, location.lng);
+    // Search multiple queries to capture sales beyond just free items
+    const queries = ['free', 'sale', 'deal'];
+    const allItems: any[] = [];
+    for (const q of queries) {
+      const url = `https://backflipp.wishabi.com/flipp/items/search?locale=en&postal_code=${postalCode}&q=${q}`;
+      const json = await (await fetch(url)).json() as any;
+      if (json.items) allItems.push(...json.items);
+    }
+    // Deduplicate across queries
+    const seen = new Set<string>();
+    const uniqueItems = allItems.filter(item => {
+      if (!item.id || seen.has(String(item.id))) return false;
+      seen.add(String(item.id));
+      return true;
+    });
+
+    const deals = await Promise.all(
+      uniqueItems.slice(0, 75).map(async (item: any) => {
+        const jitter = { lat: location.lat + (Math.random() - 0.5) * 0.05, lng: location.lng + (Math.random() - 0.5) * 0.05 };
+        const loc = await getMerchantLocation(item.merchant_name ?? '', jitter);
+
+        const originalPrice: number | null = item.original_price ?? item.was_price ?? null;
+        const currentPrice:  number | null = item.current_price ?? null;
+        const savings = originalPrice && currentPrice ? (originalPrice - currentPrice).toFixed(2) : null;
+
+        const descParts = [
+          item.sale_story ?? null,
+          currentPrice  ? `Price: $${currentPrice}`   : null,
+          originalPrice ? `Was: $${originalPrice}`     : null,
+          savings       ? `Save: $${savings}`          : null,
+          item.pre_price_text ?? null,
+        ].filter(Boolean);
+
+        const tags = ['in-store only'];
+        if (savings && parseFloat(savings) > 0) tags.push('discount');
+        if (item.valid_to) tags.push('limited time');
+
+        return {
+          title:       (item.name || item.merchant_name || 'Flipp Deal').substring(0, 200),
+          description: descParts.join(' | ').substring(0, 500),
+          category:    inferCategory((item.name ?? '') + ' ' + (item.sale_story ?? '')),
+          source:      'flipp',
+          source_id:   `flipp_${item.id}`,
+          source_url:  `https://flipp.com/item/${item.id}`,
+          deal_type:   'in-store',
+          tags,
+          status:      'available',
+          photo_urls:  item.clean_image_url ? [item.clean_image_url] : [],
+          expires_at:  item.valid_to  || null,
+          lat: loc.lat, lng: loc.lng,
+        };
+      })
+    );
+    return deals;
+  } catch (err) {
+    console.log('[scraper] Flipp error:', err);
+    return [];
+  }
 }
 
 async function scrapeReddit(subreddit: string) {
@@ -127,12 +231,41 @@ async function scrapeReddit(subreddit: string) {
 async function run() {
   console.log("Starting deals aggregation...");
 
-  const freebies = await scrapeReddit('freebies');
-  const deals = await scrapeReddit('deals');
-  const efreebies = await scrapeReddit('eFreebies');
-  
-  const allDeals = [...freebies, ...deals, ...efreebies];
-  console.log(`Found ${allDeals.length} potential deals.`);
+  // LLM discovery — Groq first (reliable free tier), Gemini as supplement if key present
+  let llmInserted = 0;
+  if (process.env.GROQ_API_KEY) {
+    llmInserted = await discoverWithLLM(supabase, 'groq');
+    console.log(`Groq LLM discovery inserted ${llmInserted} deals`);
+  }
+  if (process.env.GEMINI_API_KEY) {
+    const geminiInserted = await discoverWithLLM(supabase, 'gemini');
+    console.log(`Gemini LLM discovery inserted ${geminiInserted} deals`);
+    llmInserted += geminiInserted;
+  }
+
+  const location = {
+    lat: parseFloat(process.env.SCRAPER_LAT ?? '40.7128'),
+    lng: parseFloat(process.env.SCRAPER_LNG ?? '-74.0060'),
+  };
+
+  // Run Flipp REST API + Reddit in parallel; flyer Selenium scrape runs sequentially after
+  // (browser automation can't run fully concurrent with itself)
+  const [freebies, deals, efreebies, flippApiDeals] = await Promise.all([
+    scrapeReddit('freebies'),
+    scrapeReddit('deals'),
+    scrapeReddit('eFreebies'),
+    scrapeFlipp(location),
+  ]);
+
+  // Flyer scraper uses a real browser — opt-in via SCRAPER_FLYERS=true env var
+  let flyerDeals: any[] = [];
+  if (process.env.SCRAPER_FLYERS === 'true') {
+    console.log('Running store flyer scraper (browser)...');
+    flyerDeals = await scrapeAllFlyers();
+  }
+
+  const allDeals = [...freebies, ...deals, ...efreebies, ...flippApiDeals, ...flyerDeals];
+  console.log(`Found ${allDeals.length} potential deals (${flippApiDeals.length} from Flipp API, ${flyerDeals.length} from store flyers).`);
 
   let insertedCount = 0;
 
