@@ -22,15 +22,19 @@ CREATE TABLE IF NOT EXISTS items (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title       TEXT NOT NULL,
   description TEXT DEFAULT '',
-  category    TEXT DEFAULT 'other'
-              CHECK (category IN ('furniture','electronics','clothing','books','kitchen','sports','toys','other')),
-  lat         DOUBLE PRECISION NOT NULL,
-  lng         DOUBLE PRECISION NOT NULL,
+  category    TEXT DEFAULT 'other',
+  lat         DOUBLE PRECISION,
+  lng         DOUBLE PRECISION,
   address     TEXT,
   photo_urls  TEXT[] DEFAULT '{}',
-  source      TEXT NOT NULL DEFAULT 'user'
-              CHECK (source IN ('user','facebook','craigslist','buynot')),
+  source      TEXT NOT NULL DEFAULT 'user',
   source_id   TEXT,
+  source_url  TEXT,
+  deal_type   TEXT,
+  code        TEXT,
+  tags        TEXT[] DEFAULT '{}',
+  business_name TEXT,
+  claim_instructions TEXT,
   user_id     UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   status      TEXT DEFAULT 'available'
               CHECK (status IN ('available','claimed','deleted')),
@@ -164,6 +168,7 @@ CREATE TRIGGER on_message_inserted
   FOR EACH ROW EXECUTE FUNCTION update_conversation_on_message();
 
 -- ─── Nearby Items RPC ─────────────────────────────────────────────────────────
+DROP FUNCTION IF EXISTS get_nearby_items(DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION, TEXT, INT);
 
 CREATE OR REPLACE FUNCTION get_nearby_items(
   user_lat       DOUBLE PRECISION,
@@ -183,6 +188,12 @@ RETURNS TABLE (
   photo_urls  TEXT[],
   source      TEXT,
   source_id   TEXT,
+  source_url  TEXT,
+  deal_type   TEXT,
+  code        TEXT,
+  tags        TEXT[],
+  business_name TEXT,
+  claim_instructions TEXT,
   user_id     UUID,
   status      TEXT,
   created_at  TIMESTAMPTZ,
@@ -194,23 +205,30 @@ LANGUAGE SQL STABLE AS $$
     i.id, i.title, i.description, i.category,
     i.lat, i.lng, i.address,
     i.photo_urls, i.source, i.source_id,
+    i.source_url, i.deal_type, i.code, i.tags, i.business_name, i.claim_instructions,
     i.user_id, i.status, i.created_at, i.expires_at,
-    ST_Distance(
-      ST_Point(i.lng, i.lat)::geography,
-      ST_Point(user_lng, user_lat)::geography
-    ) / 1000.0 AS distance_km
+    CASE 
+      WHEN i.lat IS NULL OR i.lng IS NULL THEN 0.0
+      ELSE ST_Distance(
+        ST_Point(i.lng, i.lat)::geography,
+        ST_Point(user_lng, user_lat)::geography
+      ) / 1000.0
+    END AS distance_km
   FROM items i
   WHERE
     i.status = 'available'
-    AND ST_DWithin(
-      ST_Point(i.lng, i.lat)::geography,
-      ST_Point(user_lng, user_lat)::geography,
-      radius_km * 1000
+    AND (
+      (i.lat IS NULL OR i.lng IS NULL) OR
+      ST_DWithin(
+        ST_Point(i.lng, i.lat)::geography,
+        ST_Point(user_lng, user_lat)::geography,
+        radius_km * 1000
+      )
     )
     AND (get_nearby_items.category IS NULL OR i.category = get_nearby_items.category)
     AND (max_age_hours IS NULL OR i.created_at > NOW() - (max_age_hours * INTERVAL '1 hour'))
     AND (i.expires_at IS NULL OR i.expires_at > NOW())
-  ORDER BY distance_km
+  ORDER BY distance_km ASC
   LIMIT 100;
 $$;
 

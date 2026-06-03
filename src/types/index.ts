@@ -22,6 +22,10 @@ export interface Item {
   source: ItemSource;
   sourceName: string;
   sourceId?: string;
+  sourceUrl?: string;
+  tags?: string[];
+  businessName?: string;
+  claimInstructions?: string;
   userId?: string;
   status: ItemStatus;
   claimType: ClaimType;

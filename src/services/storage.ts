@@ -1,7 +1,4 @@
 import { supabase } from '@/lib/supabase';
-import * as FileSystem from 'expo-file-system';
-import { decode } from 'base64-arraybuffer';
-
 const ALLOWED_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif']);
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -16,8 +13,8 @@ export const storageService = {
     const raw = uri.substring(uri.lastIndexOf('.') + 1).toLowerCase().split('?')[0];
     const ext = ALLOWED_EXTENSIONS.has(raw) ? raw : 'jpg';
 
-    const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-    const arrayBuffer = decode(base64);
+    const response = await fetch(uri);
+    const arrayBuffer = await response.arrayBuffer();
 
     // Path must be <userId>/<filename> to satisfy the storage INSERT RLS policy.
     const filename = `${userId}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${ext}`;

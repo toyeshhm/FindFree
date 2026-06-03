@@ -10,7 +10,8 @@ import { X, Camera } from 'phosphor-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { storageService } from '@/services/storage';
 import { PrimaryButton } from '@/components/PrimaryButton';
-import { Colors, Typography, Spacing, Radius, Springs } from '@/lib';
+import { Colors, Typography, Spacing, Springs, Radius } from '@/lib';
+import { useAuthStore } from '@/stores/useAuthStore';
 import type { CommunityPost, CommunityPostType } from '@/types';
 import { createStyleSheet } from "@/lib/theme";
 
@@ -30,6 +31,7 @@ const POST_TYPES: PostTypeOption[] = [
 
 export function PostComposer({ visible, initialPost, onDismiss, onPost }: PostComposerProps) {
   const insets = useSafeAreaInsets();
+  const { session } = useAuthStore();
 
   const [type, setType]           = useState<CommunityPostType>('find');
   const [body, setBody]           = useState('');
@@ -67,7 +69,7 @@ export function PostComposer({ visible, initialPost, onDismiss, onPost }: PostCo
         if (uri.startsWith('http')) {
           uploadedUrls.push(uri);
         } else {
-          const url = await storageService.uploadImage(uri);
+          const url = await storageService.uploadImage(uri, session?.user?.id ?? 'anonymous');
           uploadedUrls.push(url);
         }
       }

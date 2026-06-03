@@ -1,10 +1,10 @@
 import React, { memo, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Linking } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withDelay, withTiming,
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
-import { Star } from 'phosphor-react-native';
+import { Star, ArrowUpRight } from 'phosphor-react-native';
 import { PressableScale } from '@/components/PressableScale';
 import { Colors, Typography, Spacing, Springs, Stamp, Radius } from '@/lib';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -180,15 +180,29 @@ export const FeedCard = memo(function FeedCard({
               {item.description}
             </Text>
 
-            {/* Meta row: distance · time */}
+            {/* Meta row: distance · time · link */}
             <View style={styles.metaRow}>
-              {distLabel !== '' && (
-                <Text style={styles.meta}>{distLabel}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {distLabel !== '' && (
+                  <Text style={styles.meta}>{distLabel}</Text>
+                )}
+                {distLabel !== '' && (
+                  <Text style={styles.metaDot}> · </Text>
+                )}
+                <Text style={styles.meta}>{formatAge(item.createdAt)}</Text>
+              </View>
+              {item.sourceUrl && (
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    Linking.openURL(item.sourceUrl!);
+                  }}
+                  style={styles.linkBtn}
+                >
+                  <Text style={styles.linkBtnText}>Get Deal</Text>
+                  <ArrowUpRight size={14} color={Colors.ACCENT} weight="bold" />
+                </Pressable>
               )}
-              {distLabel !== '' && (
-                <Text style={styles.metaDot}> · </Text>
-              )}
-              <Text style={styles.meta}>{formatAge(item.createdAt)}</Text>
             </View>
           </View>
         </View>
@@ -286,15 +300,32 @@ const styles = createStyleSheet((Colors) => ({
   },
   metaRow: {
     flexDirection: 'row',
-    alignItems:    'center',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
   },
   meta: {
-    ...Typography.caption,
+    ...Typography.bodySmall,
     color: Colors.TEXT_MUTED,
   },
   metaDot: {
-    ...Typography.caption,
+    ...Typography.bodySmall,
     color: Colors.TEXT_MUTED,
+  },
+  linkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.SURFACE_LIGHT,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Colors.BORDER,
+  },
+  linkBtnText: {
+    ...Typography.labelSmall,
+    color: Colors.ACCENT,
   },
 
   // --- GRID VARIANT ---
