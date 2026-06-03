@@ -121,21 +121,42 @@ async function resolvePlaces(items: Item[], location: LatLng): Promise<Item[]> {
 
 export const itemsService = {
   getNearby: async (location: LatLng, filters: FilterState): Promise<Item[]> => {
-    const { data, error } = await supabase.rpc('get_nearby_items', {
-      user_lat:      location.lat,
-      user_lng:      location.lng,
-      radius_km:     filters.radiusKm,
-      category:      filters.category ?? null,
-      max_age_hours: filters.maxAgeHours ?? null,
-    });
+    let query = supabase
+      .from('items')
+      .select('*')
+      .neq('status', 'deleted')
+      .order('created_at', { ascending: false })
+      .limit(500);
+
+    if (filters.category) {
+      query = query.eq('category', filters.category);
+    }
+    if (filters.maxAgeHours) {
+      const cutoff = new Date(Date.now() - filters.maxAgeHours * 3600 * 1000).toISOString();
+      query = query.gte('created_at', cutoff);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
-    
+
     let parsedItems = (data as any[]).map(rowToItem);
+
+    // Filter by radius — items with no lat/lng (online deals) always pass
+    parsedItems = parsedItems.filter(item => {
+      if (item.location.lat == null || item.location.lng == null) return true;
+      const R = 6371;
+      const dLat = (item.location.lat - location.lat) * Math.PI / 180;
+      const dLng = (item.location.lng - location.lng) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(location.lat * Math.PI / 180) * Math.cos(item.location.lat * Math.PI / 180) *
+        Math.sin(dLng / 2) ** 2;
+      const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return dist <= filters.radiusKm;
+    });
+
     parsedItems = await resolvePlaces(parsedItems, location);
-    
-    // Optional: Sort by newly computed distances since online deals were originally 0 distance
     parsedItems.sort((a, b) => (a.distanceKm ?? Number.MAX_VALUE) - (b.distanceKm ?? Number.MAX_VALUE));
-    
+
     return parsedItems;
   },
 
