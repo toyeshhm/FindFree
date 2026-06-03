@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS items (
   status      TEXT DEFAULT 'available'
               CHECK (status IN ('available','claimed','deleted')),
   created_at  TIMESTAMPTZ DEFAULT NOW(),
-  expires_at  TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days')
+  expires_at  TIMESTAMPTZ DEFAULT NULL
 );
 
 CREATE INDEX IF NOT EXISTS items_location_idx ON items USING GIST(ST_Point(lng, lat));

@@ -99,9 +99,11 @@ export const communityService = {
     if (currentlyLiked) {
       const { error } = await supabase.from('community_post_likes').delete().match({ post_id: postId, user_id: userId });
       if (error) throw error;
+      await supabase.rpc('decrement_like_count', { row_id: postId });
     } else {
       const { error } = await supabase.from('community_post_likes').insert({ post_id: postId, user_id: userId });
       if (error) throw error;
+      await supabase.rpc('increment_like_count', { row_id: postId });
     }
   },
 
@@ -123,6 +125,13 @@ export const communityService = {
 
     return data.map((d: any) => {
       const name = d.user_profiles?.name || 'Anonymous';
+      let text = d.text as string;
+      let parentId: string | undefined = undefined;
+      const match = text.match(/^\[reply_to:([a-f0-9\-]+)\] /i);
+      if (match) {
+        parentId = match[1];
+        text = text.substring(match[0].length);
+      }
       return {
         id: d.id,
         postId: d.post_id,
@@ -130,23 +139,33 @@ export const communityService = {
         userName: name,
         userInitials: name.substring(0, 2).toUpperCase(),
         userAvatarUrl: d.user_profiles?.avatar_url,
-        text: d.text,
+        parentId,
+        text,
         createdAt: d.created_at,
       };
     });
   },
 
-  createComment: async (postId: string, userId: string, text: string): Promise<CommunityComment> => {
+  createComment: async (postId: string, userId: string, text: string, parentId?: string): Promise<CommunityComment> => {
+    const finalText = parentId ? `[reply_to:${parentId}] ${text}` : text;
     const { data, error } = await supabase
       .from('community_comments')
-      .insert({ post_id: postId, user_id: userId, text })
+      .insert({ post_id: postId, user_id: userId, text: finalText })
       .select('*, user_profiles!community_comments_user_id_fkey (name, avatar_url)')
       .single();
 
     if (error) throw error;
-    // comment_count is updated automatically by the on_comment_change DB trigger.
+    await supabase.rpc('increment_comment_count', { row_id: postId });
 
     const name = data.user_profiles?.name || 'Anonymous';
+    let outputText = data.text as string;
+    let outParentId: string | undefined = undefined;
+    const match = outputText.match(/^\[reply_to:([a-f0-9\-]+)\] /i);
+    if (match) {
+      outParentId = match[1];
+      outputText = outputText.substring(match[0].length);
+    }
+    
     return {
       id: data.id,
       postId: data.post_id,
@@ -154,8 +173,21 @@ export const communityService = {
       userName: name,
       userInitials: name.substring(0, 2).toUpperCase(),
       userAvatarUrl: data.user_profiles?.avatar_url,
-      text: data.text,
+      parentId: outParentId,
+      text: outputText,
       createdAt: data.created_at,
     };
-  }
+  },
+
+  deleteComment: async (commentId: string, postId: string): Promise<void> => {
+    const { error } = await supabase.from('community_comments').delete().eq('id', commentId);
+    if (error) throw error;
+    await supabase.rpc('decrement_comment_count', { row_id: postId });
+  },
+
+  updateComment: async (commentId: string, text: string, parentId?: string): Promise<void> => {
+    const finalText = parentId ? `[reply_to:${parentId}] ${text}` : text;
+    const { error } = await supabase.from('community_comments').update({ text: finalText }).eq('id', commentId);
+    if (error) throw error;
+  },
 };

@@ -11,7 +11,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, CopySimple, DeviceMobile, MapPin, Clock,
+  ArrowLeft, CopySimple, DeviceMobile, MapPin, Clock, ChatTeardrop, Warning,
 } from 'phosphor-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Colors, Typography, Spacing, Stamp, Radius, useReducedMotion } from '@/lib';
@@ -21,6 +21,7 @@ import { PressableScale } from '@/components/PressableScale';
 import { SkeletonCard } from '@/components/SkeletonCard';
 import { Doubloon, WaxSeal, RopeDivider, ParchmentOverlay } from '@/components/motifs';
 import { PhotoCarousel } from '@/features/items/PhotoCarousel';
+import { CommentsSection } from '@/features/community/CommentsSection';
 import { useItemDetail } from '@/hooks/useItemDetail';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useSavedStore } from '@/stores/useSavedStore';
@@ -37,6 +38,17 @@ function formatExpiry(dateStr: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function extractLinks(text: string): string[] {
+  if (!text) return [];
+  const matches = text.match(/(https?:\/\/[^\s]+)/g);
+  return matches ? Array.from(new Set(matches)) : [];
+}
+
+function stripLinks(text: string): string {
+  if (!text) return '';
+  return text.replace(/(https?:\/\/[^\s]+)/g, '').trim();
+}
+
 export function ItemDetailScreen({ route, navigation }: Props) {
   const { itemId } = route.params;
   const insets  = useSafeAreaInsets();
@@ -44,9 +56,9 @@ export function ItemDetailScreen({ route, navigation }: Props) {
   const reduced = useReducedMotion();
 
   const { session }         = useAuthStore();
-  const { isSaved, toggle } = useSavedStore();
   const { data: item, isLoading } = useItemDetail(itemId);
 
+  const { isSaved, toggle } = useSavedStore();
   const savedNow = isSaved(itemId);
   const isOwner = session?.user?.id === item?.userId;
 
@@ -98,6 +110,23 @@ export function ItemDetailScreen({ route, navigation }: Props) {
     Alert.alert('Delete Post', 'Are you sure you want to delete this post?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate() }
+    ]);
+  };
+
+  const handleFeedback = () => {
+    if (!session) {
+      Alert.alert('Sign In', 'You must be signed in to submit feedback.');
+      return;
+    }
+    Alert.prompt('Submit Feedback', 'Spotted a problem? Tell the captain!', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Submit', onPress: (text) => {
+        if (text?.trim()) {
+          itemsService.submitFeedback(session.user.id, itemId, text.trim())
+            .then(() => Alert.alert('Success', 'Feedback submitted!'))
+            .catch(() => Alert.alert('Error', 'Failed to submit feedback.'));
+        }
+      }}
     ]);
   };
 
@@ -168,6 +197,7 @@ export function ItemDetailScreen({ route, navigation }: Props) {
   }
 
   const code = item.couponCode || 'FREEBIES2024';
+  const additionalLinks = extractLinks(item.description).filter(u => u !== item.sourceUrl);
 
   return (
     <View style={styles.container}>
@@ -206,10 +236,14 @@ export function ItemDetailScreen({ route, navigation }: Props) {
           {/* Title area with sourceName above */}
           <View style={styles.titleRow}>
             <View style={styles.titleBlock}>
-              <Text style={styles.sourceName}>{item.sourceName.toUpperCase()}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={styles.sourceName}>{item.sourceName.toUpperCase()}</Text>
+                <Pressable onPress={handleFeedback} hitSlop={12} accessibilityLabel="Report an issue">
+                  <Warning size={20} color={Colors.TEXT_MUTED} />
+                </Pressable>
+              </View>
               <Text style={styles.title}>{item.title}</Text>
             </View>
-            <WaxSeal label="FREE" size={56} style={styles.seal} />
           </View>
 
           {/* Expiry row */}
@@ -223,78 +257,27 @@ export function ItemDetailScreen({ route, navigation }: Props) {
           <RopeDivider style={styles.divider} />
 
           <Text style={styles.sectionHead}>The Notice</Text>
-          <Text style={styles.description}>{item.description || 'No description provided.'}</Text>
-
-          <RopeDivider style={styles.divider} />
-
-          {/* How to Claim section */}
-          <Text style={styles.sectionHead}>HOW TO CLAIM</Text>
-
-          <View style={styles.claimBlock}>
-            {item.claimType === 'code' && (
-              <>
-                <Text style={styles.claimBody}>
-                  Copy the code below and use it at checkout online or in-app.
-                </Text>
-                <View style={styles.codeRow}>
-                  <Text style={styles.codeText}>{code}</Text>
-                  <PressableScale
-                    onPress={() => copyCode(code)}
-                    accessibilityLabel="Copy coupon code"
-                    accessibilityRole="button"
-                    style={styles.copyBtn}
-                  >
-                    <CopySimple size={20} color={Colors.TEXT_MUTED} />
-                  </PressableScale>
-                </View>
-              </>
+          <Text style={styles.description}>{stripLinks(item.description) || 'No description provided.'}</Text>
+          
+          <View style={styles.extraLinksRow}>
+            {item.sourceUrl && (
+              <SecondaryButton 
+                label="Get Deal (Source)" 
+                onPress={() => Linking.openURL(item.sourceUrl!)} 
+                style={{ flex: 1, marginRight: 8 }}
+              />
             )}
-
-            {item.claimType === 'in-store' && (
-              <Text style={styles.claimBody}>
-                Head to the location and tell the staff you're claiming the free offer.
-              </Text>
-            )}
-
-            {item.claimType === 'app-required' && (
-              <>
-                <Text style={styles.claimBody}>
-                  Open the {item.sourceName} app and navigate to the offers or rewards section.
-                </Text>
-                <View style={styles.stepList}>
-                  {[
-                    `Open the ${item.sourceName} app`,
-                    'Go to Offers or Rewards',
-                    'Find and activate this deal',
-                  ].map((step, i) => (
-                    <View key={i} style={styles.stepRow}>
-                      <Text style={styles.stepNumber}>{i + 1}.</Text>
-                      <Text style={styles.claimBody}>{step}</Text>
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
-
-            {item.claimType === 'no-action' && (
-              <>
-                <Text style={styles.claimBody}>
-                  No action required — just show up! This deal is automatically available.
-                </Text>
-                <Pressable
-                  onPress={handlePrimaryPress}
-                  style={styles.iconRow}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Get directions to ${item.sourceName}`}
-                >
-                  <MapPin size={24} color={Colors.ACCENT} weight="bold" />
-                  <Text style={[styles.iconRowText, { color: Colors.ACCENT }]}>
-                    Get directions to {item.sourceName}
-                  </Text>
-                </Pressable>
-              </>
-            )}
+            {additionalLinks.map((url, idx) => (
+              <SecondaryButton 
+                key={idx}
+                label={`Link ${idx + 1}`} 
+                onPress={() => Linking.openURL(url)} 
+                style={{ flex: 1, marginRight: 8, marginTop: item.sourceUrl ? 8 : 0 }}
+              />
+            ))}
           </View>
+
+
 
           {/* Social proof */}
           {item.claimedCount != null && item.claimedCount > 0 ? (
@@ -302,6 +285,10 @@ export function ItemDetailScreen({ route, navigation }: Props) {
               {item.claimedCount} people claimed this today
             </Text>
           ) : null}
+
+          <RopeDivider style={styles.divider} />
+          
+          <CommentsSection postId={itemId} entityType="item" />
         </View>
       </AnimatedScrollView>
 
@@ -391,7 +378,7 @@ const styles = createStyleSheet((Colors) => ({
     color:         Colors.ACCENT,
     textTransform: 'uppercase',
   },
-  title: { ...Typography.displayHead, color: Colors.TEXT_PRIMARY },
+  title: { ...Typography.title, fontSize: 20, color: Colors.TEXT_PRIMARY },
   seal:  { marginTop: Spacing.micro },
   expiryRow: {
     flexDirection: 'row',
@@ -402,7 +389,16 @@ const styles = createStyleSheet((Colors) => ({
   expiryText: { ...Typography.caption, color: Colors.SEALING_WAX },
   divider:    { marginVertical: Spacing.md },
   sectionHead: { ...Typography.tinyLabel, color: Colors.TEXT_MUTED },
-  description: { ...Typography.flavor, color: Colors.TEXT_SECONDARY },
+  description: {
+    ...Typography.bodyLarge,
+    color: Colors.TEXT_SECONDARY,
+    lineHeight: 24,
+  },
+  extraLinksRow: {
+    flexDirection: 'column',
+    marginTop: 16,
+    gap: 8,
+  },
 
   // How to Claim block
   claimBlock: {

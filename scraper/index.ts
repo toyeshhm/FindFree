@@ -50,7 +50,7 @@ async function scrapeReddit(subreddit: string) {
       return [];
     }
 
-    const deals = json.items.map((item: any) => {
+    const rawDeals = await Promise.all(json.items.map(async (item: any) => {
       const sourceUrl = item.link;
       const title = item.title;
       const desc = item.description || '';
@@ -67,9 +67,43 @@ async function scrapeReddit(subreddit: string) {
         if (imgMatch && imgMatch[1]) photoUrl = imgMatch[1];
       }
 
+      let externalLink = sourceUrl;
+      const linkMatch = item.content?.match(/<a href="([^"]+)">\[link\]<\/a>/);
+      if (linkMatch && linkMatch[1]) {
+        externalLink = linkMatch[1];
+      }
+
+      if (externalLink.includes('amazon.com') || externalLink.includes('amzn.to') || title.toLowerCase().includes('amazon')) {
+        let amazonImg: string | null = null;
+        if (externalLink.startsWith('http')) {
+          try {
+            const res = await fetch(externalLink, {
+              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+            });
+            const html = await res.text();
+            let m = html.match(/<meta property="og:image" content="([^"]+)"/);
+            if (!m) m = html.match(/id="landingImage"[^>]+src="([^"]+)"/);
+            if (m && m[1]) amazonImg = m[1];
+          } catch(e) {
+            console.error('Failed to fetch amazon image', e);
+          }
+        }
+        if (amazonImg) {
+          photoUrl = amazonImg;
+        } else if (!photoUrl || photoUrl.includes('default') || photoUrl.includes('reddit')) {
+          photoUrl = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/2560px-Amazon_logo.svg.png';
+        }
+      }
+
+      let cleanDesc = desc.replace(/<[^>]*>?/gm, '');
+      // Strip reddit RSS boilerplate
+      cleanDesc = cleanDesc.replace(/submitted by\s+\/u\/[^\s]+\s+\[link\]\s+\[comments\]/gi, '');
+      cleanDesc = cleanDesc.replace(/\[link\]\s*\[comments\]/gi, '');
+      cleanDesc = cleanDesc.trim();
+
       return {
         title: title.substring(0, 200),
-        description: desc.replace(/<[^>]*>?/gm, '').substring(0, 500),
+        description: cleanDesc.substring(0, 500),
         category: category,
         source: 'reddit',
         source_id: item.guid || sourceUrl,
@@ -77,10 +111,12 @@ async function scrapeReddit(subreddit: string) {
         deal_type: sourceUrl?.includes('reddit.com') ? 'none' : 'online',
         tags: tags,
         status: 'available',
-        photo_urls: photoUrl ? [photoUrl] : [],
+        photo_urls: photoUrl ? [photoUrl.replace(/&amp;/g, '&')] : [],
+        expires_at: null,
       };
-    }).filter(Boolean);
+    }));
 
+    const deals = rawDeals.filter(Boolean);
     return deals;
   } catch (err) {
     console.error(`Error scraping r/${subreddit}:`, err);
@@ -104,25 +140,29 @@ async function run() {
     // Deduplicate by source_id
     const { data: existing } = await supabase
       .from('items')
-      .select('id')
+      .select('id, photo_urls')
       .eq('source_id', deal.source_id)
       .single();
 
     if (!existing) {
       const { error } = await supabase.from('items').insert({
         ...deal,
-        // Since reddit deals don't have explicit lat/lng, we insert them without coordinates.
-        // They will be matched for everyone as "online deals".
       });
       if (error) {
         console.error("Error inserting deal:", error.message);
       } else {
         insertedCount++;
       }
+    } else {
+      // Update existing deal with the new photo_url if it changed (and is valid)
+      if (deal.photo_urls && deal.photo_urls.length > 0 && deal.photo_urls[0] !== existing.photo_urls?.[0]) {
+        const { error } = await supabase.from('items').update({ photo_urls: deal.photo_urls }).eq('id', existing.id);
+        if (error) console.error("Error updating deal:", error.message);
+      }
     }
   }
 
-  console.log(`Aggregation complete. Inserted ${insertedCount} new deals.`);
+  console.log(`Aggregation complete. Inserted ${insertedCount} new deals, updated photos for existing.`);
 }
 
 run();

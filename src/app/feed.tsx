@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable,
+  View, Text, StyleSheet, ScrollView, Pressable, Alert
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
-import { MapPin, Bell, Funnel, Square, SquaresFour, List as ListIcon } from 'phosphor-react-native';
+import { MapPin, Bell, Funnel, Square, SquaresFour, List as ListIcon, Clock } from 'phosphor-react-native';
 import { Colors, Typography, Spacing, Radius } from '@/lib';
 import { FeedList } from '@/features/feed/FeedList';
 import { AlertsSheet } from '@/components/AlertsSheet';
+import { TimeframeSheet } from '@/components/TimeframeSheet';
 import { useNearbyItems } from '@/hooks/useNearbyItems';
 import { useLocation } from '@/hooks/useLocation';
 import { useFilterStore } from '@/stores/useFilterStore';
@@ -32,6 +33,7 @@ export function DiscoverScreen() {
   const [viewMode, setViewMode]             = useState<'card' | 'grid' | 'row'>('card');
   const [alertsOpen, setAlertsOpen]         = useState(false);
   const [filterOpen, setFilterOpen]         = useState(false);
+  const [timeframeOpen, setTimeframeOpen]   = useState(false);
   const [mapFilters, setMapFilters]         = useState<MapFilters>(DEFAULT_FILTERS);
 
   const filteredItems = useMemo(() => {
@@ -78,9 +80,18 @@ export function DiscoverScreen() {
 
       {/* ── Section label & View Toggle ── */}
       <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionLabelText}>
-          Near you · {mapFilters.radius} mi radius
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+          <Text style={styles.sectionLabelText}>
+            Showing past {filters.maxAgeHours ? (filters.maxAgeHours === 24 ? '24 hours' : `${filters.maxAgeHours / 24} days`) : '7 days'}
+          </Text>
+          <Pressable 
+            onPress={() => setTimeframeOpen(true)}
+            style={{ marginLeft: 8 }}
+            hitSlop={8}
+          >
+            <Clock size={16} color={Colors.TEXT_MUTED} />
+          </Pressable>
+        </View>
         <View style={styles.viewToggleGroup}>
           <Pressable onPress={() => setViewMode('card')} accessibilityLabel="Card view" accessibilityRole="button">
             <Square size={20} color={viewMode === 'card' ? Colors.ACCENT : Colors.TEXT_MUTED} weight={viewMode === 'card' ? 'fill' : 'regular'} />
@@ -108,6 +119,14 @@ export function DiscoverScreen() {
       
       {/* ── Alerts bottom sheet ── */}
       <AlertsSheet visible={alertsOpen} onDismiss={() => setAlertsOpen(false)} />
+
+      {/* ── Timeframe sheet ── */}
+      <TimeframeSheet
+        visible={timeframeOpen}
+        value={filters.maxAgeHours}
+        onChange={(hours) => useFilterStore.getState().setMaxAge(hours)}
+        onDismiss={() => setTimeframeOpen(false)}
+      />
 
       {/* ── Filter sheet (shared with Map) ── */}
       <MapFilterSheet

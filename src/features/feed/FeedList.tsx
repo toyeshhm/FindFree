@@ -2,7 +2,10 @@ import React, { useCallback } from 'react';
 import { FlatList, RefreshControl } from 'react-native';
 import { FeedCard } from './FeedCard';
 import { FeedCardSkeleton } from './FeedCardSkeleton';
+import { CommentsSheet } from '../community/CommentsSheet';
 import { EmptyState } from '@/components';
+import { PrimaryButton } from '@/components/PrimaryButton';
+import { View } from 'react-native';
 import { Colors, Spacing } from '@/lib';
 import { useSavedStore } from '@/stores/useSavedStore';
 import type { Item } from '@/types';
@@ -26,6 +29,7 @@ import { useNavigation } from '@/navigation/types';
 export function FeedList({
   items, isLoading, isRefreshing, onRefresh, onItemPress, onClearFilters, hasFilters, viewMode = 'card',
 }: FeedListProps) {
+  const [activeCommentId, setActiveCommentId] = React.useState<string | null>(null);
   const { isSaved, toggle } = useSavedStore();
   const qc = useQueryClient();
   const { session } = useAuthStore();
@@ -55,6 +59,7 @@ export function FeedList({
         onPress={onItemPress}
         saved={isSaved(item.id)}
         onSave={handleSave}
+        onCommentPress={setActiveCommentId}
         variant={viewMode}
       />,
     [onItemPress, isSaved, handleSave, viewMode]
@@ -75,6 +80,7 @@ export function FeedList({
     : 'Widen your radius, or wait — fresh caches surface by the hour.';
 
   return (
+    <>
     <FlatList
       key={viewMode}
       data={items}
@@ -103,6 +109,46 @@ export function FeedList({
       maxToRenderPerBatch={8}
       windowSize={5}
       initialNumToRender={6}
+      ListFooterComponent={
+        items.length > 0 ? (
+          <View style={{ padding: Spacing.xl, alignItems: 'center', justifyContent: 'center' }}>
+            <PrimaryButton 
+              label={isScraping ? "SCRAPING..." : "SCRAPE MORE FINDS"} 
+              loading={isScraping}
+              onPress={async () => {
+                if (!session) {
+                  Alert.alert('Sign in required', 'Please sign in to help find and submit new deals!', [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Sign In', onPress: () => nav.navigate('Auth', { screen: 'SignIn' }) },
+                  ]);
+                  return;
+                }
+                setIsScraping(true);
+                try {
+                  const imported = await scrapeMoreFinds(session.user.id);
+                  if (imported > 0) {
+                    await qc.invalidateQueries({ queryKey: ['items', 'nearby'] });
+                    Alert.alert('Success!', `Found and added ${imported} new deals.`);
+                  } else {
+                    Alert.alert('All caught up', 'No new deals found at the moment. Try again later!');
+                  }
+                } catch (e) {
+                  Alert.alert('Error', 'Failed to scrape deals.');
+                } finally {
+                  setIsScraping(false);
+                }
+              }} 
+            />
+          </View>
+        ) : null
+      }
     />
+    <CommentsSheet
+      postId={activeCommentId}
+      entityType="item"
+      visible={activeCommentId !== null}
+      onDismiss={() => setActiveCommentId(null)}
+    />
+    </>
   );
 }

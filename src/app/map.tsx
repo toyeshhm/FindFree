@@ -88,7 +88,9 @@ export function MapScreen({ route, navigation }: BottomTabScreenProps<TabParamLi
         showsUserLocation
         onPress={() => {}}
       >
-        {filteredItems.map((item) => (
+        {filteredItems
+          .filter((item) => item.location.lat != null && item.location.lng != null)
+          .map((item) => (
           <ItemMarker
             key={item.id}
             item={item}

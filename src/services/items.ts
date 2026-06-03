@@ -6,17 +6,35 @@ const SOURCE_NAMES: Record<string, string> = {
   flipp: 'Flipp', reddit: 'Reddit r/freebies', user: 'Community', facebook: 'Facebook',
 };
 
+function getDefaultLogo(source: string, sourceName: string): string | null {
+  const s = (sourceName + ' ' + source).toLowerCase();
+  if (s.includes('reddit')) return 'https://www.redditinc.com/assets/images/site/reddit-logo.png';
+  if (s.includes('mcdonald')) return 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/McDonald%27s_Golden_Arches.svg/512px-McDonald%27s_Golden_Arches.svg.png';
+  if (s.includes('starbucks')) return 'https://upload.wikimedia.org/wikipedia/en/thumb/d/d3/Starbucks_Corporation_Logo_2011.svg/512px-Starbucks_Corporation_Logo_2011.svg.png';
+  if (s.includes('chick-fil-a') || s.includes('chickfila')) return 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/02/Chick-fil-A_Logo.svg/512px-Chick-fil-A_Logo.svg.png';
+  if (s.includes('wendy')) return 'https://upload.wikimedia.org/wikipedia/en/thumb/3/32/Wendy%27s_full_logo_2012.svg/512px-Wendy%27s_full_logo_2012.svg.png';
+  if (s.includes('burger king')) return 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/cc/Burger_King_2020.svg/512px-Burger_King_2020.svg.png';
+  if (s.includes('subway')) return 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Subway_2016_logo.svg/512px-Subway_2016_logo.svg.png';
+  if (s.includes('flipp')) return 'https://corp.flipp.com/wp-content/uploads/2022/04/Flipp_logo.png';
+  return null;
+}
+
 function rowToItem(row: any): Item {
   const source = row.source ?? 'user';
+  const sourceName = row.business_name ?? row.source_name ?? SOURCE_NAMES[source] ?? source;
+  const photoUrls = (row.photo_urls ?? []).map((url: string) => url.replace(/&amp;/g, '&'));
+  const defaultLogo = photoUrls.length === 0 ? getDefaultLogo(source, sourceName) : null;
+  const finalPhotoUrls = defaultLogo ? [defaultLogo] : photoUrls;
+
   return {
     id:           row.id,
     title:        row.title,
     description:  row.description ?? '',
     category:     row.category ?? 'food',
     location:     { lat: row.lat, lng: row.lng, address: row.address },
-    photoUrls:    row.photo_urls ?? [],
+    photoUrls:    finalPhotoUrls,
     source,
-    sourceName:   row.business_name ?? row.source_name ?? SOURCE_NAMES[source] ?? source,
+    sourceName,
     sourceId:     row.source_id,
     sourceUrl:    row.source_url,
     tags:         row.tags ?? [],
@@ -151,12 +169,94 @@ export const itemsService = {
 
   toggleSave: async (userId: string, itemId: string, saved: boolean): Promise<void> => {
     if (saved) {
-      const { error } = await supabase.from('saved_items').insert({ user_id: userId, item_id: itemId });
-      if (error) throw error;
+      const { error } = await supabase.from('saved_items')
+        .insert({ user_id: userId, item_id: itemId });
+      // Ignore conflict errors if they tap quickly and it inserts twice
+      if (error && error.code !== '23505') throw error;
     } else {
       const { error } = await supabase.from('saved_items')
         .delete().eq('user_id', userId).eq('item_id', itemId);
       if (error) throw error;
     }
   },
+
+  getItemComments: async (itemId: string) => {
+    const { data, error } = await supabase
+      .from('item_comments')
+      .select('*, user_profiles!item_comments_user_id_fkey(name, avatar_url)')
+      .eq('item_id', itemId)
+      .order('created_at', { ascending: true });
+    
+    if (error) throw error;
+    
+    return data.map((d: any) => {
+      const name = d.user_profiles?.name || 'Anonymous';
+      let text = d.text as string;
+      let parentId: string | undefined = undefined;
+      const match = text.match(/^\[reply_to:([a-f0-9\-]+)\] /i);
+      if (match) {
+        parentId = match[1];
+        text = text.substring(match[0].length);
+      }
+      return {
+        id: d.id,
+        postId: d.item_id, // Map item_id to postId so we can reuse CommunityComment type easily
+        userId: d.user_id,
+        userName: name,
+        userInitials: name.substring(0, 2).toUpperCase(),
+        userAvatarUrl: d.user_profiles?.avatar_url,
+        parentId,
+        text,
+        createdAt: d.created_at,
+      };
+    });
+  },
+
+  createItemComment: async (itemId: string, userId: string, text: string, parentId?: string) => {
+    const finalText = parentId ? `[reply_to:${parentId}] ${text}` : text;
+    const { data, error } = await supabase
+      .from('item_comments')
+      .insert({ item_id: itemId, user_id: userId, text: finalText })
+      .select('*, user_profiles!item_comments_user_id_fkey(name, avatar_url)')
+      .single();
+
+    if (error) throw error;
+    
+    const name = data.user_profiles?.name || 'Anonymous';
+    let outputText = data.text as string;
+    let outParentId: string | undefined = undefined;
+    const match = outputText.match(/^\[reply_to:([a-f0-9\-]+)\] /i);
+    if (match) {
+      outParentId = match[1];
+      outputText = outputText.substring(match[0].length);
+    }
+    
+    return {
+      id: data.id,
+      postId: data.item_id,
+      userId: data.user_id,
+      userName: name,
+      userInitials: name.substring(0, 2).toUpperCase(),
+      userAvatarUrl: data.user_profiles?.avatar_url,
+      parentId: outParentId,
+      text: outputText,
+      createdAt: data.created_at,
+    };
+  },
+
+  updateItemComment: async (commentId: string, text: string, parentId?: string): Promise<void> => {
+    const finalText = parentId ? `[reply_to:${parentId}] ${text}` : text;
+    const { error } = await supabase.from('item_comments').update({ text: finalText }).eq('id', commentId);
+    if (error) throw error;
+  },
+
+  deleteItemComment: async (commentId: string): Promise<void> => {
+    const { error } = await supabase.from('item_comments').delete().eq('id', commentId);
+    if (error) throw error;
+  },
+
+  submitFeedback: async (userId: string, itemId: string | undefined, message: string): Promise<void> => {
+    const { error } = await supabase.from('app_feedback').insert({ user_id: userId, item_id: itemId || null, message });
+    if (error) throw error;
+  }
 };

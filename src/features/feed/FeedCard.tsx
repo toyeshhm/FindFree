@@ -4,7 +4,7 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withDelay, withTiming,
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
-import { Star, ArrowUpRight } from 'phosphor-react-native';
+import { Star, ArrowUpRight, ChatTeardrop } from 'phosphor-react-native';
 import { PressableScale } from '@/components/PressableScale';
 import { Colors, Typography, Spacing, Springs, Stamp, Radius } from '@/lib';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -23,6 +23,17 @@ function formatAge(isoString: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+function extractLinks(text: string): string[] {
+  if (!text) return [];
+  const matches = text.match(/(https?:\/\/[^\s]+)/g);
+  return matches ? Array.from(new Set(matches)) : [];
+}
+
+function stripLinks(text: string): string {
+  if (!text) return '';
+  return text.replace(/(https?:\/\/[^\s]+)/g, '').trim();
+}
+
 function claimLabel(ct: ClaimType): string {
   switch (ct) {
     case 'code':         return 'CODE';
@@ -38,11 +49,12 @@ interface FeedCardProps {
   onPress:  (itemId: string) => void;
   saved?:   boolean;
   onSave?:  (itemId: string) => void;
+  onCommentPress?: (itemId: string) => void;
   variant?: 'card' | 'grid' | 'row';
 }
 
 export const FeedCard = memo(function FeedCard({
-  item, index, onPress, saved = false, onSave, variant = 'card',
+  item, index, onPress, saved = false, onSave, onCommentPress, variant = 'card',
 }: FeedCardProps) {
   const reduced = useReducedMotion();
   const ty      = useSharedValue(16);
@@ -67,8 +79,10 @@ export const FeedCard = memo(function FeedCard({
   const hasPhoto    = item.photoUrls.length > 0;
   const showNew     = isNew(item);
   const claimBadge  = claimLabel(item.claimType);
-  const distLabel   = item.distanceMi != null ? `${item.distanceMi.toFixed(1)} mi` : '';
-  const a11yLabel   = `${item.title}${distLabel ? ', ' + distLabel + ' away' : ''}, free`;
+  const distLabel   = ''; // Removed distance reading as requested
+  const a11yLabel   = `${item.title}, free`;
+  
+  const additionalLinks = extractLinks(item.description).filter(u => u !== item.sourceUrl);
 
   if (variant === 'grid') {
     return (
@@ -82,11 +96,24 @@ export const FeedCard = memo(function FeedCard({
             )}
             <View style={styles.gridContent}>
               <Text style={styles.gridTitle} numberOfLines={2}>{item.title}</Text>
-              <Text style={styles.gridSource}>{item.sourceName}</Text>
-              {distLabel !== '' && <Text style={styles.gridDistance}>{distLabel}</Text>}
-              <Pressable onPress={() => onSave?.(item.id)} hitSlop={8} style={styles.gridSaveBtn}>
-                <Star size={16} color={saved ? Colors.ACCENT : Colors.TEXT_MUTED} weight={saved ? 'fill' : 'regular'} />
-              </Pressable>
+              
+              <View style={styles.gridMetaRow}>
+                <Text style={styles.meta}>{formatAge(item.createdAt)}</Text>
+                <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+
+                  {item.sourceUrl && (
+                    <Pressable
+                      onPress={(e) => { e.stopPropagation(); Linking.openURL(item.sourceUrl!); }}
+                      hitSlop={8}
+                    >
+                      <ArrowUpRight size={14} color={Colors.ACCENT} weight="bold" />
+                    </Pressable>
+                  )}
+                  <Pressable onPress={(e) => { e.stopPropagation(); onSave?.(item.id); }} hitSlop={8}>
+                    <Star size={16} color={saved ? Colors.ACCENT : Colors.TEXT_MUTED} weight={saved ? 'fill' : 'regular'} />
+                  </Pressable>
+                </View>
+              </View>
             </View>
           </View>
         </PressableScale>
@@ -105,9 +132,9 @@ export const FeedCard = memo(function FeedCard({
           )}
           <View style={styles.rowContent}>
             <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
-            <Text style={styles.rowSource}>{item.sourceName} {distLabel ? `· ${distLabel}` : ''}</Text>
+            <Text style={styles.rowSource} numberOfLines={1}>{item.sourceName} {distLabel ? `· ${distLabel}` : ''}</Text>
           </View>
-          <Pressable onPress={() => onSave?.(item.id)} hitSlop={8} style={styles.rowSaveBtn}>
+          <Pressable onPress={(e) => { e.stopPropagation(); onSave?.(item.id); }} hitSlop={8} style={styles.rowSaveBtn}>
             <Star size={20} color={saved ? Colors.ACCENT : Colors.TEXT_MUTED} weight={saved ? 'fill' : 'regular'} />
           </Pressable>
         </PressableScale>
@@ -158,7 +185,7 @@ export const FeedCard = memo(function FeedCard({
             <View style={styles.titleRow}>
               <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
               <Pressable
-                onPress={() => onSave?.(item.id)}
+                onPress={(e) => { e.stopPropagation(); onSave?.(item.id); }}
                 accessibilityRole="button"
                 accessibilityLabel={saved ? 'Unsave deal' : 'Save deal'}
                 hitSlop={8}
@@ -173,12 +200,22 @@ export const FeedCard = memo(function FeedCard({
             </View>
 
             {/* Source name */}
-            <Text style={styles.sourceName}>{item.sourceName}</Text>
+            <Text style={styles.sourceName} numberOfLines={1}>{item.sourceName}</Text>
 
             {/* Description */}
             <Text style={styles.description} numberOfLines={2}>
-              {item.description}
+              {stripLinks(item.description)}
             </Text>
+
+            {additionalLinks.length > 0 && (
+              <View style={styles.extraLinksRow}>
+                {additionalLinks.map((url, idx) => (
+                  <Pressable key={idx} style={styles.extraLinkBtn} onPress={(e) => { e.stopPropagation(); Linking.openURL(url); }}>
+                    <Text style={styles.extraLinkBtnText}>Link {idx + 1}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
 
             {/* Meta row: distance · time · link */}
             <View style={styles.metaRow}>
@@ -191,7 +228,17 @@ export const FeedCard = memo(function FeedCard({
                 )}
                 <Text style={styles.meta}>{formatAge(item.createdAt)}</Text>
               </View>
-              {item.sourceUrl && (
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {onCommentPress && (
+                  <Pressable
+                    onPress={(e) => { e.stopPropagation(); onCommentPress(item.id); }}
+                    style={styles.linkBtn}
+                    hitSlop={8}
+                  >
+                    <ChatTeardrop size={16} color={Colors.TEXT_MUTED} />
+                  </Pressable>
+                )}
+                {item.sourceUrl && (
                 <Pressable
                   onPress={(e) => {
                     e.stopPropagation();
@@ -203,6 +250,7 @@ export const FeedCard = memo(function FeedCard({
                   <ArrowUpRight size={14} color={Colors.ACCENT} weight="bold" />
                 </Pressable>
               )}
+              </View>
             </View>
           </View>
         </View>
@@ -312,6 +360,24 @@ const styles = createStyleSheet((Colors) => ({
     ...Typography.bodySmall,
     color: Colors.TEXT_MUTED,
   },
+  extraLinksRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  extraLinkBtn: {
+    backgroundColor: Colors.SURFACE,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: Colors.BORDER,
+  },
+  extraLinkBtnText: {
+    ...Typography.caption,
+    color: Colors.TEXT_PRIMARY,
+  },
   linkBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -368,6 +434,12 @@ const styles = createStyleSheet((Colors) => ({
     ...Typography.caption,
     color: Colors.ACCENT,
     marginBottom: 2,
+  },
+  gridMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
   },
   gridDistance: {
     ...Typography.caption,

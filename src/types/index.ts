@@ -62,6 +62,7 @@ export interface CommunityComment {
   userName: string;
   userInitials: string;
   userAvatarUrl?: string;
+  parentId?: string;
   text: string;
   createdAt: string;
 }
