@@ -226,7 +226,7 @@ export function ItemDetailScreen({ route, navigation }: Props) {
         scrollEventThrottle={16}
         bounces={false}
         overScrollMode="never"
-        contentContainerStyle={{ paddingBottom: 150 }}
+        contentContainerStyle={{ paddingTop: insets.top + 60, paddingBottom: 150 }}
       >
         <Animated.View style={parallaxStyle}>
           <PhotoCarousel urls={item.photoUrls} title={item.title} />

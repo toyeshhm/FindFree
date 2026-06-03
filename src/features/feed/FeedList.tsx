@@ -20,16 +20,19 @@ interface FeedListProps {
   hasFilters?:  boolean;
   viewMode?:    'card' | 'grid' | 'row';
 }
+
 import { Alert } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { itemsService } from '@/services/items';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useNavigation } from '@/navigation/types';
+import { scrapeMoreFinds } from '@/services/scraperClient';
 
 export function FeedList({
   items, isLoading, isRefreshing, onRefresh, onItemPress, onClearFilters, hasFilters, viewMode = 'card',
 }: FeedListProps) {
   const [activeCommentId, setActiveCommentId] = React.useState<string | null>(null);
+  const [isScraping, setIsScraping] = React.useState(false);
   const { isSaved, toggle } = useSavedStore();
   const qc = useQueryClient();
   const { session } = useAuthStore();
