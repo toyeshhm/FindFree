@@ -4,12 +4,15 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withDelay, withTiming,
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
-import { Star, ArrowUpRight, ChatTeardrop } from 'phosphor-react-native';
+import { Star, ArrowUpRight, ChatTeardrop, MapPin, Heart } from 'phosphor-react-native';
 import { PressableScale } from '@/components/PressableScale';
-import { Colors, Typography, Spacing, Springs, Stamp, Radius } from '@/lib';
+import { Colors, Typography, Fonts, Spacing, Springs, Stamp, Radius } from '@/lib';
+import { useLikesStore } from '@/stores/useLikesStore';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import type { Item, ClaimType } from '@/types';
 import { createStyleSheet } from "@/lib/theme";
+
+const PLACEHOLDER_IMG = require('../../../assets/placeholder.png');
 
 function isNew(item: Item): boolean {
   return Date.now() - new Date(item.createdAt).getTime() < 2 * 60 * 60 * 1000;
@@ -50,12 +53,16 @@ interface FeedCardProps {
   saved?:   boolean;
   onSave?:  (itemId: string) => void;
   onCommentPress?: (itemId: string) => void;
+  onViewOnMap?: (item: Item) => void;
+  onLike?: (itemId: string) => void;
   variant?: 'card' | 'grid' | 'row';
 }
 
 export const FeedCard = memo(function FeedCard({
-  item, index, onPress, saved = false, onSave, onCommentPress, variant = 'card',
+  item, index, onPress, saved = false, onSave, onCommentPress, onViewOnMap, onLike, variant = 'card',
 }: FeedCardProps) {
+  const isLiked    = useLikesStore(s => s.isLiked(item.id));
+  const likeCount  = (item.likeCount ?? 0) + (isLiked && !item.likedByMe ? 1 : !isLiked && item.likedByMe ? -1 : 0);
   const reduced = useReducedMotion();
   const ty      = useSharedValue(16);
   const op      = useSharedValue(0);
@@ -76,11 +83,11 @@ export const FeedCard = memo(function FeedCard({
     opacity: op.value,
   }));
 
-  const hasPhoto    = item.photoUrls.length > 0;
-  const showNew     = isNew(item);
-  const claimBadge  = claimLabel(item.claimType);
-  const distLabel   = ''; // Removed distance reading as requested
-  const a11yLabel   = `${item.title}, free`;
+  const hasPhoto   = item.photoUrls.length > 0;
+  const showNew    = isNew(item);
+  const claimBadge = claimLabel(item.claimType);
+  const hasLocation = item.location?.lat != null && item.location?.lng != null;
+  const a11yLabel  = `${item.title}, free`;
   
   const additionalLinks = extractLinks(item.description).filter(u => u !== item.sourceUrl);
 
@@ -90,9 +97,11 @@ export const FeedCard = memo(function FeedCard({
         <PressableScale onPress={() => onPress(item.id)} style={styles.gridCard} variant="scale" accessibilityLabel={a11yLabel} accessibilityRole="button">
           <View style={styles.gridInner}>
             {hasPhoto ? (
-              <Image source={{ uri: item.photoUrls[0] }} style={styles.gridImage} contentFit="cover" />
+              <Image source={{ uri: item.photoUrls[0] }} placeholder={PLACEHOLDER_IMG} style={styles.gridImage} contentFit="cover" />
             ) : (
-              <View style={styles.gridPlaceholder} />
+              <View style={[styles.gridImage, { padding: 40, backgroundColor: Colors.SURFACE_DEEP }]}>
+                <Image source={PLACEHOLDER_IMG} style={{ width: '100%', height: '100%', opacity: 0.8 }} contentFit="contain" />
+              </View>
             )}
             <View style={styles.gridContent}>
               <Text style={styles.gridTitle} numberOfLines={2}>{item.title}</Text>
@@ -126,13 +135,15 @@ export const FeedCard = memo(function FeedCard({
       <Animated.View style={entryStyle}>
         <PressableScale onPress={() => onPress(item.id)} style={styles.rowCard} variant="scale" accessibilityLabel={a11yLabel} accessibilityRole="button">
           {hasPhoto ? (
-            <Image source={{ uri: item.photoUrls[0] }} style={styles.rowImage} contentFit="cover" />
+            <Image source={{ uri: item.photoUrls[0] }} placeholder={PLACEHOLDER_IMG} style={styles.rowImage} contentFit="cover" />
           ) : (
-            <View style={styles.rowPlaceholder} />
+            <View style={[styles.rowImage, { padding: 8, backgroundColor: Colors.SURFACE_DEEP }]}>
+              <Image source={PLACEHOLDER_IMG} style={{ width: '100%', height: '100%', opacity: 0.8 }} contentFit="contain" />
+            </View>
           )}
           <View style={styles.rowContent}>
             <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
-            <Text style={styles.rowSource} numberOfLines={1}>{item.sourceName} {distLabel ? `· ${distLabel}` : ''}</Text>
+            <Text style={styles.rowSource} numberOfLines={1}>{item.sourceName}</Text>
           </View>
           <Pressable onPress={(e) => { e.stopPropagation(); onSave?.(item.id); }} hitSlop={8} style={styles.rowSaveBtn}>
             <Star size={20} color={saved ? Colors.ACCENT : Colors.TEXT_MUTED} weight={saved ? 'fill' : 'regular'} />
@@ -157,11 +168,14 @@ export const FeedCard = memo(function FeedCard({
             {hasPhoto ? (
               <Image
                 source={{ uri: item.photoUrls[0] }}
+                placeholder={PLACEHOLDER_IMG}
                 style={StyleSheet.absoluteFill}
                 contentFit="cover"
               />
             ) : (
-              <View style={styles.imagePlaceholder} />
+              <View style={[StyleSheet.absoluteFill, { padding: 40, backgroundColor: Colors.SURFACE_DEEP }]}>
+                <Image source={PLACEHOLDER_IMG} style={{ width: '100%', height: '100%', opacity: 0.8 }} contentFit="contain" />
+              </View>
             )}
 
             {/* NEW badge — top-left, only when < 2 h old */}
@@ -217,18 +231,31 @@ export const FeedCard = memo(function FeedCard({
               </View>
             )}
 
-            {/* Meta row: distance · time · link */}
+            {/* Meta row: time · map · comment · link */}
             <View style={styles.metaRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                {distLabel !== '' && (
-                  <Text style={styles.meta}>{distLabel}</Text>
-                )}
-                {distLabel !== '' && (
-                  <Text style={styles.metaDot}> · </Text>
-                )}
-                <Text style={styles.meta}>{formatAge(item.createdAt)}</Text>
-              </View>
+              <Text style={styles.meta}>{formatAge(item.createdAt)}</Text>
               <View style={{ flexDirection: 'row', gap: 12 }}>
+                {onLike && (
+                  <Pressable
+                    onPress={(e) => { e.stopPropagation(); onLike(item.id); }}
+                    style={styles.linkBtn}
+                    hitSlop={8}
+                    accessibilityLabel={isLiked ? 'Unlike' : 'Like'}
+                  >
+                    <Heart size={14} color={isLiked ? Colors.SEALING_WAX : Colors.TEXT_MUTED} weight={isLiked ? 'fill' : 'regular'} />
+                    {likeCount > 0 && <Text style={[styles.linkBtnText, { color: isLiked ? Colors.SEALING_WAX : Colors.TEXT_MUTED }]}>{likeCount}</Text>}
+                  </Pressable>
+                )}
+                {onViewOnMap && hasLocation && (
+                  <Pressable
+                    onPress={(e) => { e.stopPropagation(); onViewOnMap(item); }}
+                    style={styles.linkBtn}
+                    hitSlop={8}
+                    accessibilityLabel="View on map"
+                  >
+                    <MapPin size={14} color={Colors.SEA} weight="fill" />
+                  </Pressable>
+                )}
                 {onCommentPress && (
                   <Pressable
                     onPress={(e) => { e.stopPropagation(); onCommentPress(item.id); }}
@@ -239,17 +266,14 @@ export const FeedCard = memo(function FeedCard({
                   </Pressable>
                 )}
                 {item.sourceUrl && (
-                <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    Linking.openURL(item.sourceUrl!);
-                  }}
-                  style={styles.linkBtn}
-                >
-                  <Text style={styles.linkBtnText}>Get Deal</Text>
-                  <ArrowUpRight size={14} color={Colors.ACCENT} weight="bold" />
-                </Pressable>
-              )}
+                  <Pressable
+                    onPress={(e) => { e.stopPropagation(); Linking.openURL(item.sourceUrl!); }}
+                    style={styles.linkBtn}
+                  >
+                    <Text style={styles.linkBtnText}>Get Deal</Text>
+                    <ArrowUpRight size={14} color={Colors.ACCENT} weight="bold" />
+                  </Pressable>
+                )}
               </View>
             </View>
           </View>
@@ -329,7 +353,10 @@ const styles = createStyleSheet((Colors) => ({
     marginBottom:   4,
   },
   title: {
-    ...Typography.subheading,
+    fontFamily: Fonts.display,
+    fontSize:   18,
+    lineHeight: 24,
+    letterSpacing: 0.2,
     color:      Colors.TEXT_PRIMARY,
     flex:       1,
   },
@@ -426,7 +453,10 @@ const styles = createStyleSheet((Colors) => ({
     padding: 8,
   },
   gridTitle: {
-    ...Typography.label,
+    fontFamily: Fonts.display,
+    fontSize:   14,
+    lineHeight: 18,
+    letterSpacing: 0.2,
     color: Colors.TEXT_PRIMARY,
     marginBottom: 2,
   },

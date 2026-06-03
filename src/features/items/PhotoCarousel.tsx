@@ -18,15 +18,18 @@ interface PhotoCarouselProps {
  * Photos framed as pinned map plates — each on an ink-bordered parchment mount,
  * with page indicators rendered as small engraved brass coins.
  */
+const PLACEHOLDER_IMG = require('../../../assets/placeholder.png');
+
 export function PhotoCarousel({ urls, title }: PhotoCarouselProps) {
   const [index, setIndex] = useState(0);
 
   if (!urls.length) {
     return (
       <View style={styles.frame}>
-        <View style={styles.empty}>
-          <MapTrifold size={40} color={Colors.TEXT_MUTED} weight="duotone" />
-          <Text style={styles.emptyText}>No plates pinned to this chart yet</Text>
+        <View style={styles.plate}>
+          <View style={[styles.image, { padding: 40, backgroundColor: Colors.SURFACE_DEEP }]}>
+            <Image source={PLACEHOLDER_IMG} style={{ width: '100%', height: '100%', opacity: 0.8 }} contentFit="contain" />
+          </View>
         </View>
       </View>
     );
@@ -49,6 +52,7 @@ export function PhotoCarousel({ urls, title }: PhotoCarouselProps) {
           renderItem={({ item: uri }) => (
             <Image
               source={{ uri }}
+              placeholder={PLACEHOLDER_IMG}
               style={styles.image}
               contentFit="cover"
               accessibilityLabel={title}

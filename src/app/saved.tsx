@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Square, SquaresFour, List as ListIcon, Bell, Funnel } from 'phosphor-react-native';
 import { Colors, Typography, Spacing } from '@/lib';
@@ -89,12 +89,14 @@ export function SavedScreen() {
       </View>
 
       {filteredItems.length === 0 && !isLoading ? (
-        <EmptyState
-          message="Nothing saved yet."
-          secondary="Tap the star on any deal to save it here."
-          actionLabel="Browse Deals"
-          onAction={() => nav.navigate('Main', { screen: 'DiscoverTab' })}
-        />
+        <ScrollView contentContainerStyle={{ paddingTop: Spacing.sm, paddingBottom: 120 }}>
+          <EmptyState
+            message="Nothing saved yet."
+            secondary="Tap the star on any deal to save it here."
+            actionLabel="Browse Deals"
+            onAction={() => nav.navigate('Main', { screen: 'DiscoverTab' })}
+          />
+        </ScrollView>
       ) : (
         <FeedList
           items={filteredItems}

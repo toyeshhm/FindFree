@@ -19,6 +19,7 @@ interface FeedListProps {
   onClearFilters?: () => void;
   hasFilters?:  boolean;
   viewMode?:    'card' | 'grid' | 'row';
+  location?:    { lat: number; lng: number } | null;
 }
 
 import { Alert } from 'react-native';
@@ -27,13 +28,15 @@ import { itemsService } from '@/services/items';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useNavigation } from '@/navigation/types';
 import { scrapeMoreFinds } from '@/services/scraperClient';
+import { useLikesStore } from '@/stores/useLikesStore';
 
 export function FeedList({
-  items, isLoading, isRefreshing, onRefresh, onItemPress, onClearFilters, hasFilters, viewMode = 'card',
+  items, isLoading, isRefreshing, onRefresh, onItemPress, onClearFilters, hasFilters, viewMode = 'card', location = null,
 }: FeedListProps) {
   const [activeCommentId, setActiveCommentId] = React.useState<string | null>(null);
   const [isScraping, setIsScraping] = React.useState(false);
   const { isSaved, toggle } = useSavedStore();
+  const { isLiked, toggle: toggleLike } = useLikesStore();
   const qc = useQueryClient();
   const { session } = useAuthStore();
   const nav = useNavigation();
@@ -54,6 +57,28 @@ export function FeedList({
       .catch(() => toggle(itemId));
   }, [session, isSaved, toggle, qc, nav]);
 
+  const handleLike = useCallback((itemId: string) => {
+    if (!session) {
+      Alert.alert('Sign in to like items', '', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign In', onPress: () => nav.navigate('Auth', { screen: 'SignIn' }) },
+      ]);
+      return;
+    }
+    const wasLiked = isLiked(itemId);
+    toggleLike(itemId);
+    itemsService.toggleLike(session.user.id, itemId, !wasLiked).catch(() => toggleLike(itemId));
+  }, [session, isLiked, toggleLike, nav]);
+
+  const handleViewOnMap = useCallback((item: Item) => {
+    if (item.location?.lat != null && item.location?.lng != null) {
+      nav.navigate('Main', {
+        screen: 'MapTab',
+        params: { focusLat: item.location.lat, focusLng: item.location.lng },
+      });
+    }
+  }, [nav]);
+
   const renderItem = useCallback(
     ({ item, index }: { item: Item; index: number }) =>
       <FeedCard
@@ -63,9 +88,11 @@ export function FeedList({
         saved={isSaved(item.id)}
         onSave={handleSave}
         onCommentPress={setActiveCommentId}
+        onViewOnMap={handleViewOnMap}
+        onLike={handleLike}
         variant={viewMode}
       />,
-    [onItemPress, isSaved, handleSave, viewMode]
+    [onItemPress, isSaved, handleSave, viewMode, handleViewOnMap, handleLike]
   );
   const keyExtractor = useCallback((item: Item) => item.id, []);
 
@@ -113,9 +140,11 @@ export function FeedList({
       windowSize={5}
       initialNumToRender={6}
       ListFooterComponent={
-        items.length > 0 ? (
-          <View style={{ padding: Spacing.xl, alignItems: 'center', justifyContent: 'center' }}>
+        (
+          <View style={{ padding: Spacing.xl, alignItems: 'center', justifyContent: 'center', width: '100%' }}>
             <PrimaryButton 
+              style={{ alignSelf: 'center', transform: [{ translateX: -8 }] }}
+              size={viewMode === 'grid' ? 'small' : 'default'}
               label={isScraping ? "SCRAPING..." : "SCRAPE MORE FINDS"} 
               loading={isScraping}
               onPress={async () => {
@@ -128,7 +157,8 @@ export function FeedList({
                 }
                 setIsScraping(true);
                 try {
-                  const imported = await scrapeMoreFinds(session.user.id);
+                  const scrapeLocation = location || { lat: 40.7128, lng: -74.0060 };
+                  const imported = await scrapeMoreFinds(session.user.id, scrapeLocation);
                   if (imported > 0) {
                     await qc.invalidateQueries({ queryKey: ['items', 'nearby'] });
                     Alert.alert('Success!', `Found and added ${imported} new deals.`);
@@ -143,7 +173,7 @@ export function FeedList({
               }} 
             />
           </View>
-        ) : null
+        )
       }
     />
     <CommentsSheet

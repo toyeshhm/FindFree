@@ -13,11 +13,12 @@ import { SecondaryButton } from '@/components/SecondaryButton';
 import { createStyleSheet } from "@/lib/theme";
 
 export interface MapFilters {
-  category:  string;       // 'all' | 'food' | 'drinks' | 'grocery' | 'retail' | 'local'
-  radius:    number;       // miles: 0.5 | 1 | 2 | 5 | 10
-  dealTypes: string[];     // 'free' | 'coupon' | 'discount'
-  claimTypes: string[];    // 'code' | 'in-store' | 'app-required'
-  postedWithin: string;    // 'hour' | 'today' | 'week' | 'any'
+  category:    string;    // 'all' | any DealCategory
+  radius:      number;    // miles: 0.5 | 1 | 2 | 5 | 10
+  dealTypes:   string[];  // 'free' | 'coupon' | 'discount'
+  claimTypes:  string[];  // 'code' | 'in-store' | 'app-required' | 'no-action'
+  postedWithin: string;  // 'hour' | 'today' | 'week' | 'any'
+  sources:     string[];  // 'reddit' | 'slickdeals' | '9to5toys' | 'dealnews' | 'flipp' | 'hip2save' | 'user'
 }
 
 export const DEFAULT_FILTERS: MapFilters = {
@@ -25,7 +26,8 @@ export const DEFAULT_FILTERS: MapFilters = {
   radius:      5,
   dealTypes:   [],
   claimTypes:  [],
-  postedWithin: 'any'
+  postedWithin: 'any',
+  sources:     [],
 };
 
 interface MapFilterSheetProps {
@@ -44,6 +46,7 @@ function countActive(f: MapFilters): number {
   if (f.dealTypes.length) n++;
   if (f.claimTypes.length) n++;
   if (f.postedWithin !== 'any') n++;
+  if (f.sources.length) n++;
   return n;
 }
 
@@ -108,7 +111,7 @@ export function MapFilterSheet({ visible, filters, onChange, onDismiss }: MapFil
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: ty.value }] }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: op.value }));
 
-  const toggle = (key: 'dealTypes' | 'claimTypes', val: string) => {
+  const toggle = (key: 'dealTypes' | 'claimTypes' | 'sources', val: string) => {
     setDraft((d) => {
       const arr = d[key];
       return {
@@ -150,8 +153,16 @@ export function MapFilterSheet({ visible, filters, onChange, onDismiss }: MapFil
               { label: 'Food', value: 'food' },
               { label: 'Drinks', value: 'drinks' },
               { label: 'Grocery', value: 'grocery' },
+              { label: 'Electronics', value: 'electronics' },
+              { label: 'Clothing', value: 'clothing' },
+              { label: 'Furniture', value: 'furniture' },
+              { label: 'Kitchen', value: 'kitchen' },
+              { label: 'Books', value: 'books' },
+              { label: 'Sports', value: 'sports' },
+              { label: 'Toys', value: 'toys' },
               { label: 'Retail', value: 'retail' },
               { label: 'Local', value: 'local' },
+              { label: 'Other', value: 'other' },
             ]}
             active={draft.category}
             onToggle={(v) => setDraft((d) => ({ ...d, category: v }))}
@@ -205,6 +216,22 @@ export function MapFilterSheet({ visible, filters, onChange, onDismiss }: MapFil
             ]}
             active={draft.postedWithin}
             onToggle={(v) => setDraft((d) => ({ ...d, postedWithin: v }))}
+          />
+
+          <PillRow
+            label="SOURCE"
+            options={[
+              { label: 'Reddit', value: 'reddit' },
+              { label: 'Slickdeals', value: 'slickdeals' },
+              { label: '9to5Toys', value: '9to5toys' },
+              { label: 'DealNews', value: 'dealnews' },
+              { label: 'Flipp', value: 'flipp' },
+              { label: 'Hip2Save', value: 'hip2save' },
+              { label: 'Community', value: 'user' },
+            ]}
+            active={draft.sources}
+            onToggle={(v) => toggle('sources', v)}
+            multi
           />
           </ScrollView>
 

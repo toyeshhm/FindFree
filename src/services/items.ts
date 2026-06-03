@@ -3,7 +3,9 @@ import type { Item, LatLng, FilterState } from '@/types';
 
 const SOURCE_NAMES: Record<string, string> = {
   mcdonalds: "McDonald's", starbucks: 'Starbucks', chickfila: 'Chick-fil-A',
-  flipp: 'Flipp', reddit: 'Reddit r/freebies', user: 'Community', facebook: 'Facebook',
+  flipp: 'Flipp', reddit: 'Reddit', user: 'Community', facebook: 'Facebook',
+  slickdeals: 'Slickdeals', '9to5toys': '9to5Toys', hip2save: 'Hip2Save',
+  dealnews: 'DealNews', krazycouponlady: 'Krazy Coupon Lady',
 };
 
 function getDefaultLogo(source: string, sourceName: string): string | null {
@@ -16,6 +18,10 @@ function getDefaultLogo(source: string, sourceName: string): string | null {
   if (s.includes('burger king')) return 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/cc/Burger_King_2020.svg/512px-Burger_King_2020.svg.png';
   if (s.includes('subway')) return 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Subway_2016_logo.svg/512px-Subway_2016_logo.svg.png';
   if (s.includes('flipp')) return 'https://corp.flipp.com/wp-content/uploads/2022/04/Flipp_logo.png';
+  if (s.includes('slickdeal')) return 'https://static.slickdealscdn.com/common/images/slickdeals-logo.png';
+  if (s.includes('9to5')) return 'https://9to5toys.com/wp-content/uploads/sites/3/2020/04/9to5Toys-logo.png';
+  if (s.includes('hip2save')) return 'https://hip2save.com/wp-content/themes/hip2save/images/logo.png';
+  if (s.includes('dealnews')) return 'https://www.dealnews.com/img/logos/dealnews-logo-2x.png';
   return null;
 }
 
@@ -45,6 +51,8 @@ function rowToItem(row: any): Item {
     claimType:    row.deal_type ?? row.claim_type ?? 'in-store',
     couponCode:   row.code ?? row.coupon_code,
     claimedCount: row.claimed_count ?? 0,
+    likeCount:    row.like_count ?? 0,
+    likedByMe:    row.liked_by_me ?? false,
     createdAt:    row.created_at,
     expiresAt:    row.expires_at,
     distanceKm:   row.distance_km,
@@ -253,6 +261,18 @@ export const itemsService = {
   deleteItemComment: async (commentId: string): Promise<void> => {
     const { error } = await supabase.from('item_comments').delete().eq('id', commentId);
     if (error) throw error;
+  },
+
+  toggleLike: async (userId: string, itemId: string, liked: boolean): Promise<void> => {
+    if (liked) {
+      const { error } = await supabase.from('item_likes')
+        .insert({ user_id: userId, item_id: itemId });
+      if (error && error.code !== '23505') throw error;
+    } else {
+      const { error } = await supabase.from('item_likes')
+        .delete().eq('user_id', userId).eq('item_id', itemId);
+      if (error) throw error;
+    }
   },
 
   submitFeedback: async (userId: string, itemId: string | undefined, message: string): Promise<void> => {

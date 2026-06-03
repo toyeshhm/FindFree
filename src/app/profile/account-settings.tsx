@@ -6,10 +6,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, User, Lock, Trash, SignOut, CaretRight, CheckCircle } from 'phosphor-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors, Typography, Spacing, Radius, Stamp } from '@/lib';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useThemeStore } from '@/stores/useThemeStore';
 import { usersService } from '@/services/users';
+import { storageService } from '@/services/storage';
 import { supabase } from '@/lib/supabase';
 import { useNavigation } from '@/navigation/types';
 import { createStyleSheet } from "@/lib/theme";
@@ -62,6 +64,40 @@ export function AccountSettingsScreen() {
     queryFn:  () => usersService.getById(userId),
     enabled:  !!userId,
   });
+
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const handleUpdateAvatar = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission to access camera roll is required!');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (result.canceled) return;
+
+      setUploadingAvatar(true);
+      const uri = result.assets[0].uri;
+      
+      const avatarUrl = await storageService.uploadImage(uri, userId, 'item-photos');
+      await usersService.update(userId, { avatarUrl });
+      qc.invalidateQueries({ queryKey: ['user', userId] });
+      supabase.auth.refreshSession();
+      Alert.alert('Success', 'Profile picture updated!');
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Failed to update profile picture.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   // ── Edit Name Modal ────────────────────────────────────────────────────────
   const [editingName,  setEditingName]  = useState(false);
@@ -175,6 +211,19 @@ export function AccountSettingsScreen() {
 
         {/* ── Profile ─────────────────────────────────────────────────── */}
         <Section title="Profile">
+          {uploadingAvatar ? (
+            <View style={styles.row}>
+               <View style={styles.rowContent}>
+                 <Text style={styles.rowLabel}>Profile Picture</Text>
+               </View>
+               <ActivityIndicator size="small" color={Colors.ACCENT} />
+            </View>
+          ) : (
+            <SettingsRow
+              label="Profile Picture"
+              onPress={handleUpdateAvatar}
+            />
+          )}
           {editingName ? (
             <View style={styles.inlineEdit}>
               <TextInput

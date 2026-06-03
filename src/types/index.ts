@@ -2,7 +2,7 @@ export type DealCategory = 'food' | 'drinks' | 'grocery' | 'retail' | 'local' | 
 export type ItemCategory = DealCategory;
 
 export type ClaimType   = 'code' | 'in-store' | 'app-required' | 'no-action';
-export type ItemSource  = 'user' | 'reddit' | 'mcdonalds' | 'starbucks' | 'chickfila' | 'flipp' | 'facebook' | 'craigslist';
+export type ItemSource  = 'user' | 'reddit' | 'mcdonalds' | 'starbucks' | 'chickfila' | 'flipp' | 'facebook' | 'craigslist' | 'slickdeals' | '9to5toys' | 'hip2save' | 'dealnews' | 'krazycouponlady';
 export type ItemStatus  = 'available' | 'claimed' | 'deleted';
 
 export type CommunityPostType = 'coupon' | 'free-stuff' | 'find';
@@ -31,6 +31,8 @@ export interface Item {
   claimType: ClaimType;
   couponCode?: string;
   claimedCount?: number;
+  likeCount?: number;
+  likedByMe?: boolean;
   createdAt: string;
   expiresAt?: string;
   distanceKm?: number;

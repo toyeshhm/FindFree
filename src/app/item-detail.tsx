@@ -11,7 +11,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, CopySimple, DeviceMobile, MapPin, Clock, ChatTeardrop, Warning,
+  ArrowLeft, CopySimple, DeviceMobile, MapPin, Clock, ChatTeardrop, Warning, Heart,
 } from 'phosphor-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Colors, Typography, Spacing, Stamp, Radius, useReducedMotion } from '@/lib';
@@ -25,6 +25,7 @@ import { CommentsSection } from '@/features/community/CommentsSection';
 import { useItemDetail } from '@/hooks/useItemDetail';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useSavedStore } from '@/stores/useSavedStore';
+import { useLikesStore } from '@/stores/useLikesStore';
 import { itemsService } from '@/services/items';
 import type { RootStackParamList } from '@/navigation/types';
 import { createStyleSheet } from "@/lib/theme";
@@ -60,6 +61,9 @@ export function ItemDetailScreen({ route, navigation }: Props) {
 
   const { isSaved, toggle } = useSavedStore();
   const savedNow = isSaved(itemId);
+  const { isLiked, toggle: toggleLike } = useLikesStore();
+  const likedNow   = isLiked(itemId);
+  const likeCount  = (item?.likeCount ?? 0) + (likedNow && !item?.likedByMe ? 1 : !likedNow && item?.likedByMe ? -1 : 0);
   const isOwner = session?.user?.id === item?.userId;
 
   const scrollY = useSharedValue(0);
@@ -76,13 +80,6 @@ export function ItemDetailScreen({ route, navigation }: Props) {
     return { transform: [{ translateY: ty }] };
   });
 
-  const saveMutation = useMutation({
-    mutationFn: () => itemsService.toggleSave(session!.user.id, itemId, !savedNow),
-    onMutate:   () => toggle(itemId),
-    onError:    () => toggle(itemId),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['items', 'saved'] }),
-  });
-
   const handleSave = () => {
     if (!session) {
       Alert.alert('Sign in to save items', '', [
@@ -91,7 +88,24 @@ export function ItemDetailScreen({ route, navigation }: Props) {
       ]);
       return;
     }
-    saveMutation.mutate();
+    const wasSaved = isSaved(itemId);
+    toggle(itemId);
+    itemsService.toggleSave(session.user.id, itemId, !wasSaved)
+      .then(() => qc.invalidateQueries({ queryKey: ['items', 'saved'] }))
+      .catch(() => toggle(itemId));
+  };
+
+  const handleLike = () => {
+    if (!session) {
+      Alert.alert('Sign in to like items', '', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign In', onPress: () => navigation.navigate('Auth', { screen: 'SignIn' }) },
+      ]);
+      return;
+    }
+    const wasLiked = isLiked(itemId);
+    toggleLike(itemId);
+    itemsService.toggleLike(session.user.id, itemId, !wasLiked).catch(() => toggleLike(itemId));
   };
 
   const deleteMutation = useMutation({
@@ -247,12 +261,12 @@ export function ItemDetailScreen({ route, navigation }: Props) {
           </View>
 
           {/* Expiry row */}
-          {item.expiresAt ? (
+          {item.expiresAt && (
             <View style={styles.expiryRow}>
-              <Clock size={18} color={Colors.SEALING_WAX} weight="bold" />
+              <Clock size={16} color={Colors.SEALING_WAX} weight="bold" />
               <Text style={styles.expiryText}>Expires {formatExpiry(item.expiresAt)}</Text>
             </View>
-          ) : null}
+          )}
 
           <RopeDivider style={styles.divider} />
 
@@ -279,12 +293,24 @@ export function ItemDetailScreen({ route, navigation }: Props) {
 
 
 
-          {/* Social proof */}
-          {item.claimedCount != null && item.claimedCount > 0 ? (
-            <Text style={styles.socialProof}>
-              {item.claimedCount} people claimed this today
-            </Text>
-          ) : null}
+          {/* Like button + social proof */}
+          <View style={styles.likeRow}>
+            <Pressable
+              onPress={handleLike}
+              style={[styles.likeBtn, likedNow && styles.likeBtnActive]}
+              accessibilityRole="button"
+              accessibilityLabel={likedNow ? 'Unlike' : 'Like this deal'}
+              hitSlop={8}
+            >
+              <Heart size={18} color={likedNow ? Colors.SURFACE_LIGHT : Colors.SEALING_WAX} weight={likedNow ? 'fill' : 'regular'} />
+              <Text style={[styles.likeBtnText, likedNow && styles.likeBtnTextActive]}>
+                {likeCount > 0 ? `${likeCount} ${likedNow ? 'Liked' : 'Like'}` : (likedNow ? 'Liked' : 'Like')}
+              </Text>
+            </Pressable>
+            {item.claimedCount != null && item.claimedCount > 0 && (
+              <Text style={styles.socialProof}>{item.claimedCount} claimed today</Text>
+            )}
+          </View>
 
           <RopeDivider style={styles.divider} />
           
@@ -447,6 +473,36 @@ const styles = createStyleSheet((Colors) => ({
     color:     Colors.TEXT_MUTED,
     textAlign: 'center',
     marginTop: Spacing.sm,
+  },
+
+  // Like
+  likeRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'space-between',
+    marginTop:      Spacing.sm,
+  },
+  likeBtn: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               6,
+    paddingHorizontal: 14,
+    paddingVertical:   8,
+    borderRadius:      Radius.pill,
+    borderWidth:       1.5,
+    borderColor:       Colors.SEALING_WAX,
+    backgroundColor:   Colors.SURFACE_LIGHT,
+  },
+  likeBtnActive: {
+    backgroundColor: Colors.SEALING_WAX,
+    borderColor:     Colors.SEALING_WAX,
+  },
+  likeBtnText: {
+    ...Typography.label,
+    color: Colors.SEALING_WAX,
+  },
+  likeBtnTextActive: {
+    color: Colors.SURFACE_LIGHT,
   },
 
   // Toast

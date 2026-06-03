@@ -3,8 +3,8 @@ import { Fonts } from './fonts';
 
 type TypographyRole = Omit<TextStyle, 'color'>;
 
-// System sans for body / dense UI — readability where the user is in a task.
-const bodyFont = Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' });
+// Aged ledger flavor for body text to match the pirate theme
+const bodyFont = Fonts.flavor;
 
 export const Typography: Record<string, TypographyRole> = {
   // ── Display (Pirata One) — wordmark & hero only ──

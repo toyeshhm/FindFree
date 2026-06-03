@@ -38,13 +38,29 @@ export function DiscoverScreen() {
 
   const filteredItems = useMemo(() => {
     return items.filter(i => {
-      const matchesCat   = mapFilters.category === 'all' || !mapFilters.category || i.category === (mapFilters.category as DealCategory);
+      const matchesCat = mapFilters.category === 'all' || !mapFilters.category || i.category === (mapFilters.category as DealCategory);
       const matchesClaim = mapFilters.claimTypes.length === 0 || mapFilters.claimTypes.includes(i.claimType);
-      return matchesCat && matchesClaim;
+      const matchesSource = mapFilters.sources.length === 0 || mapFilters.sources.includes(i.source);
+      const matchesDealType = mapFilters.dealTypes.length === 0 || mapFilters.dealTypes.some(dt => {
+        const text = (i.title + ' ' + i.description).toLowerCase();
+        if (dt === 'free')     return /\bfree\b/.test(i.title.toLowerCase()) || (i.tags ?? []).includes('free item');
+        if (dt === 'coupon')   return i.claimType === 'code' || (i.tags ?? []).includes('discount');
+        if (dt === 'discount') return /\d+%\s*off|save\s*\$\d+/.test(text);
+        return false;
+      });
+      const matchesTime = (() => {
+        if (mapFilters.postedWithin === 'any') return true;
+        const age = Date.now() - new Date(i.createdAt).getTime();
+        if (mapFilters.postedWithin === 'hour')  return age < 60 * 60 * 1000;
+        if (mapFilters.postedWithin === 'today') return age < 24 * 60 * 60 * 1000;
+        if (mapFilters.postedWithin === 'week')  return age < 7 * 24 * 60 * 60 * 1000;
+        return true;
+      })();
+      return matchesCat && matchesClaim && matchesSource && matchesDealType && matchesTime;
     });
   }, [items, mapFilters]);
 
-  const hasFilters = !!(filters.category || filters.maxAgeHours || filters.radiusKm !== 10);
+  const hasFilters = !!(filters.category || filters.maxAgeHours || filters.radiusKm !== 10) || countActive(mapFilters) > 0;
 
   return (
     <View style={styles.container}>
@@ -111,6 +127,7 @@ export function DiscoverScreen() {
         isLoading={isLoading}
         isRefreshing={isRefetching}
         viewMode={viewMode}
+        location={location}
         onRefresh={() => qc.invalidateQueries({ queryKey: ['items', 'nearby'] })}
         onItemPress={(id) => nav.navigate('ItemDetail', { itemId: id })}
         hasFilters={hasFilters}

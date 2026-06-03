@@ -15,6 +15,7 @@ interface PrimaryButtonProps {
   loading?: boolean;
   style?: ViewStyle;
   accessibilityLabel?: string;
+  size?: 'default' | 'small';
 }
 
 /**
@@ -22,7 +23,7 @@ interface PrimaryButtonProps {
  * like a wax seal being stamped.
  */
 export const PrimaryButton = React.memo(function PrimaryButton({
-  label, onPress, fullWidth, showArrow, disabled, loading, style, accessibilityLabel,
+  label, onPress, fullWidth, showArrow, disabled, loading, style, accessibilityLabel, size = 'default'
 }: PrimaryButtonProps) {
   const handlePress = () => {
     HapticFeedback.impact();
@@ -38,20 +39,20 @@ export const PrimaryButton = React.memo(function PrimaryButton({
       variant="stamp"
       style={[styles.shell, fullWidth && styles.fullWidth, isDisabled && styles.disabled, style]}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityLabel={accessibilityLabel || label}
       accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
     >
-      <View style={styles.core}>
+      <View style={[styles.core, size === 'small' && styles.coreSmall]}>
         {loading ? (
-          <ActivityIndicator size="small" color={Colors.SURFACE_LIGHT} />
+          <ActivityIndicator color={Colors.SURFACE_LIGHT} size={size === 'small' ? 14 : "small"} />
         ) : (
           <>
-            <Text style={styles.label} numberOfLines={1} accessible={false}>
+            <Text style={[styles.label, size === 'small' && styles.labelSmall]} adjustsFontSizeToFit numberOfLines={1}>
               {label.toUpperCase()}
             </Text>
             {showArrow && (
-              <View style={styles.iconZone} accessible={false}>
-                <ArrowRight size={15} color={Colors.SURFACE_LIGHT} weight="bold" />
+              <View style={styles.iconZone}>
+                <ArrowRight size={size === 'small' ? 14 : 18} color={Colors.SURFACE_LIGHT} weight="bold" />
               </View>
             )}
           </>
@@ -81,11 +82,20 @@ const styles = createStyleSheet((Colors) => ({
     minHeight: 54,
     gap: Spacing.sm,
   },
+  coreSmall: {
+    paddingVertical: 8,
+    paddingHorizontal: Spacing.md,
+    minHeight: 36,
+  },
   label: {
     ...Typography.label,
     color: Colors.SURFACE_LIGHT,
     fontSize: 14,
     letterSpacing: 1.5,
+  },
+  labelSmall: {
+    fontSize: 12,
+    letterSpacing: 1,
   },
   iconZone: { alignItems: 'center', justifyContent: 'center' },
 }));
